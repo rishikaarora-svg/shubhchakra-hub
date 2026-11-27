@@ -12,7 +12,7 @@ npm run dev                  # http://localhost:5173 (also exposed on your LAN f
 npm run build && npm run preview
 ```
 
-Camera capture and live QR scanning require **HTTPS or localhost**. To test on a phone, deploy (e.g. Vercel: root directory `shubhchakra-hub`) or use an HTTPS tunnel.
+Camera capture and live QR scanning require **HTTPS or localhost**. To test on a phone, deploy (e.g. import this repo into Vercel, then set `GEMINI_API_KEY` in the project settings) or use an HTTPS tunnel.
 
 ## Views (`?role=`)
 
