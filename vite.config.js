@@ -9,6 +9,7 @@ function apiDevServer(env) {
     name: 'api-dev-server',
     configureServer(server) {
       server.middlewares.use('/api/analyze-waste', async (req, res) => {
+        if (req.method === 'GET') { res.statusCode = 204; res.end(); return } // warm-up ping
         let raw = ''
         for await (const chunk of req) raw += chunk
         let body = null

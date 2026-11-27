@@ -30,8 +30,8 @@ Deep links: `?role=ngo&bagId=SC-FR-0007` highlights a bag. `?role=recycler&bagId
 ## Notes
 
 - **AI calls go through a server function:** the browser posts the photo to `/api/analyze-waste` ([api/analyze-waste.js](api/analyze-waste.js) → [server/analyze-waste.js](server/analyze-waste.js)), which calls Gemini with `GEMINI_API_KEY` from the server environment. The key never ships to the browser. In `npm run dev` the same handler runs as Vite middleware. The endpoint only accepts same-site browser calls, validates the stream, and caps image size.
-- **AI guardrail:** `analyzeWasteImageWithAI` (src/lib/gemini.js) aborts after `VITE_GEMINI_TIMEOUT_MS` (1500 ms) and finishes an on-device analysis 600 ms later. The result card shows which path ran.
-- **Model:** `gemini-1.5-flash` from the spec (and `2.5-flash`) are retired for new keys. The default is `gemini-3.5-flash-lite`, which answered in ~1.1 s in testing. Bigger models such as `gemini-3.8-flash` usually miss the 1.5 s guardrail. Set with `GEMINI_MODEL`.
+- **AI guardrail:** `analyzeWasteImageWithAI` (src/lib/gemini.js) aborts after `VITE_GEMINI_TIMEOUT_MS` (2000 ms; the original spec said 1.5 s, raised because Gemini round trips run 0.9–1.5 s) and finishes an on-device analysis 600 ms later. The result card shows which path ran.
+- **Model:** `gemini-1.5-flash` from the spec (and `2.5-flash`) are retired for new keys. The default is `gemini-3.5-flash-lite`, which answered in ~1.1 s in testing. Bigger models such as `gemini-3.8-flash` usually miss the 2 s guardrail. Set with `GEMINI_MODEL`.
 - **Vercel env vars:** set `GEMINI_API_KEY` (and optionally `GEMINI_MODEL`) for Production and Preview in the project settings.
 - **State:** all state lives in `localStorage` and syncs live across tabs on the same device (e.g. a projector tab + a phone-sized tab). There is no backend. "Reset demo" in Control Tower restores the opening 225/240 kg state.
 - The certificate, partners and business figures are demo/illustrative, not official filings.

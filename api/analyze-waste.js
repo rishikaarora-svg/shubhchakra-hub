@@ -16,6 +16,7 @@ export async function POST(request) {
   return Response.json(out, { status, headers: { 'Cache-Control': 'no-store' } })
 }
 
+// Warm-up ping from the Field Coordinator page: starts the function without calling Gemini.
 export function GET() {
-  return Response.json({ error: 'Method not allowed' }, { status: 405 })
+  return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } })
 }

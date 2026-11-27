@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Cpu, ImageUp, RefreshCw, ScanEye, Sparkles, SwitchCamera, X } from 'lucide-react'
 import { downscale, fileToDataUrl } from '../lib/image.js'
+import { warmUpAI } from '../lib/gemini.js'
 import { STREAMS } from '../lib/streams.js'
 import { useStore } from '../lib/store.jsx'
 import { Button } from './ui.jsx'
@@ -30,7 +31,7 @@ export function CaptureButton({ onCapture, label, variant = 'primary', size = 'l
         }}
       />
       <Button variant={variant} size={size} icon={busy ? RefreshCw : icon} className={className} disabled={busy}
-        onClick={() => (canUseLiveCamera() ? setOpen(true) : pickFile())}>{label}</Button>
+        onClick={() => { warmUpAI(); if (canUseLiveCamera()) setOpen(true); else pickFile() }}>{label}</Button>
       {open && (
         <LiveCamera
           maxSide={maxSide} quality={quality}

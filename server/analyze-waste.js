@@ -5,7 +5,7 @@
 const STREAM_NAMES = { food: 'Food Rescue', organic: 'Organic Compost', dry: 'Dry Recyclables', sanitary: 'Sanitary' }
 const NAME_TO_KEY = Object.fromEntries(Object.entries(STREAM_NAMES).map(([k, v]) => [v.toLowerCase(), k]))
 const MAX_IMAGE_BASE64 = 2_000_000 // ~1.5 MB JPEG; the client sends ~100 KB
-const UPSTREAM_TIMEOUT_MS = 6000 // client gives up at 1.5 s anyway; don't let orphaned calls linger
+const UPSTREAM_TIMEOUT_MS = 6000 // client gives up at 2 s anyway; don't let orphaned calls linger
 
 const PROMPT = (expected) => `You are a waste-segregation inspector at a Jaipur banquet venue enforcing India's Solid Waste Management Rules 2026 and FSSAI surplus-food guidelines.
 Look at the photo of a waste bag/container. The field lead says it should be: "${STREAM_NAMES[expected]}".
@@ -40,7 +40,7 @@ export async function handleAnalyzeRequest({ method, body, origin, host, env }) 
   const data = image.includes(',') ? image.split(',')[1] : image
   if (data.length > MAX_IMAGE_BASE64) return { status: 413, body: { error: 'Image too large' } }
 
-  const model = env.GEMINI_MODEL || 'gemini-3.5-flash-lite' // fastest model that reliably answers inside the 1.5 s guardrail
+  const model = env.GEMINI_MODEL || 'gemini-3.5-flash-lite' // fastest model that reliably answers inside the 2 s guardrail
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS)
   const started = Date.now()

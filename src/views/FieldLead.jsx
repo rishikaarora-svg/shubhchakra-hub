@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeft, ArrowRight, Camera, ClipboardCheck, MapPin, Minus, Plus, Printer, QrCode, RotateCcw, Send, Truck } from 'lucide-react'
 import { nextBagId, useStore } from '../lib/store.jsx'
-import { analyzeWasteImageWithAI } from '../lib/gemini.js'
+import { analyzeWasteImageWithAI, geminiTimeout, warmUpAI } from '../lib/gemini.js'
 import { thumbnail } from '../lib/image.js'
 import { BINS, STREAMS, STREAM_KEYS, destinationFor } from '../lib/streams.js'
 import { Button, Card, CardTitle, Note, PageHeader, StatusPill, StreamBadge, Toggle } from '../components/ui.jsx'
@@ -26,6 +26,9 @@ export default function FieldLead({ go }) {
   const [gps, setGps] = useState(null)
 
   const bag = state.bags.find((b) => b.id === bagId)
+
+  // Wake the AI server function while the coordinator is choosing a stream, so the first photo isn't slowed by a cold start.
+  useEffect(() => { warmUpAI() }, [])
 
   if (!state.event.registered) {
     return (
@@ -119,7 +122,7 @@ export default function FieldLead({ go }) {
             ) : (
               <div className="space-y-3">
                 <CaptureButton onCapture={onCapture} label={t('field.snap')} className="w-full" icon={Camera} />
-                <p className="text-muted text-center">The photo is checked by Gemini Vision. If it takes longer than 1.5 seconds, an on-device check is used instead.</p>
+                <p className="text-muted text-center">The photo is checked by Gemini Vision. If it takes longer than {geminiTimeout / 1000} seconds, an on-device check is used instead.</p>
                 <button className="w-full text-muted underline underline-offset-4 min-h-11" onClick={() => setPhoto('skipped')}>{t('field.skipPhoto')}</button>
               </div>
             )}

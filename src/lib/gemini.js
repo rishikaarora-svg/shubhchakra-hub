@@ -1,12 +1,20 @@
 // Gemini Vision waste classifier with a hard stage guardrail:
-// if the live call does not answer within TIMEOUT_MS (default 1.5 s) or the device is offline,
+// if the live call does not answer within TIMEOUT_MS (default 2 s) or the device is offline,
 // we finish an on-device analysis in 600 ms so a live demo never stalls.
 import { STREAMS } from './streams.js'
 
 const ENDPOINT = '/api/analyze-waste' // server function holds the Gemini key; nothing secret ships to the browser
-const TIMEOUT_MS = Number(import.meta.env.VITE_GEMINI_TIMEOUT_MS) || 1500
+const TIMEOUT_MS = Number(import.meta.env.VITE_GEMINI_TIMEOUT_MS) || 2000
 
 export const geminiTimeout = TIMEOUT_MS
+
+/** Cheap GET (204, no Gemini call) that starts a cold server function before the first real photo. */
+let lastWarm = 0
+export function warmUpAI() {
+  if (Date.now() - lastWarm < 60_000) return
+  lastWarm = Date.now()
+  fetch(ENDPOINT, { method: 'GET', cache: 'no-store' }).catch(() => {})
+}
 
 /**
  * @param {string} base64Image data URL or bare base64 JPEG
