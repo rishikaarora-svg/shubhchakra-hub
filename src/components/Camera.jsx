@@ -1,28 +1,132 @@
-import { useRef, useState } from 'react'
-import { Camera, Cpu, RefreshCw, ScanEye, Sparkles } from 'lucide-react'
-import { fileToDataUrl } from '../lib/image.js'
+import { useEffect, useRef, useState } from 'react'
+import { Camera, Cpu, ImageUp, RefreshCw, ScanEye, Sparkles, SwitchCamera, X } from 'lucide-react'
+import { downscale, fileToDataUrl } from '../lib/image.js'
 import { STREAMS } from '../lib/streams.js'
 import { useStore } from '../lib/store.jsx'
 import { Button } from './ui.jsx'
 
-/** Native rear-camera capture: opens the phone camera directly; on desktop opens a file picker. */
+const canUseLiveCamera = () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && window.isSecureContext
+
+/**
+ * Photo button. Opens a live in-app camera (laptop webcam or phone camera) with a shutter button.
+ * Falls back to the device's own camera / file picker when live camera access isn't available.
+ */
 export function CaptureButton({ onCapture, label, variant = 'primary', size = 'lg', icon = Camera, className = '', maxSide = 768 }) {
-  const ref = useRef(null)
+  const fileRef = useRef(null)
   const [busy, setBusy] = useState(false)
+  const [open, setOpen] = useState(false)
+  const quality = maxSide < 768 ? 0.65 : 0.8
+  const pickFile = () => fileRef.current?.click()
   return (
     <>
       <input
-        ref={ref} type="file" accept="image/*" capture="environment" className="hidden"
+        ref={fileRef} type="file" accept="image/*" className="hidden"
         onChange={async (e) => {
           const f = e.target.files?.[0]
           e.target.value = ''
           if (!f) return
           setBusy(true)
-          try { onCapture(await fileToDataUrl(f, maxSide, maxSide < 768 ? 0.65 : 0.8)) } finally { setBusy(false) }
+          try { onCapture(await fileToDataUrl(f, maxSide, quality)) } finally { setBusy(false) }
         }}
       />
-      <Button variant={variant} size={size} icon={busy ? RefreshCw : icon} className={className} onClick={() => ref.current?.click()} disabled={busy}>{label}</Button>
+      <Button variant={variant} size={size} icon={busy ? RefreshCw : icon} className={className} disabled={busy}
+        onClick={() => (canUseLiveCamera() ? setOpen(true) : pickFile())}>{label}</Button>
+      {open && (
+        <LiveCamera
+          maxSide={maxSide} quality={quality}
+          onCapture={(d) => { setOpen(false); onCapture(d) }}
+          onClose={() => setOpen(false)}
+          onUpload={() => { setOpen(false); pickFile() }}
+        />
+      )}
     </>
+  )
+}
+
+/** Full-screen viewfinder using getUserMedia, rear camera preferred. */
+function LiveCamera({ onCapture, onClose, onUpload, maxSide, quality }) {
+  const videoRef = useRef(null)
+  const [facing, setFacing] = useState('environment')
+  const [ready, setReady] = useState(false)
+  const [error, setError] = useState(null)
+  const [multiCam, setMultiCam] = useState(false)
+  const [flash, setFlash] = useState(false)
+
+  useEffect(() => {
+    let stream, cancelled = false
+    setReady(false); setError(null)
+    ;(async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false })
+        if (cancelled) { stream.getTracks().forEach((tr) => tr.stop()); return }
+        const v = videoRef.current
+        v.srcObject = stream
+        await v.play()
+        setReady(true)
+        const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [])
+        setMultiCam(devices.filter((d) => d.kind === 'videoinput').length > 1)
+      } catch (e) {
+        if (cancelled) return
+        setError(e?.name === 'NotAllowedError'
+          ? 'Camera permission was blocked. Allow camera access in your browser’s address bar, or upload a photo instead.'
+          : e?.name === 'NotFoundError' ? 'No camera was found on this device. Upload a photo instead.'
+          : 'The camera could not be started. It may be in use by another app. Upload a photo instead.')
+      }
+    })()
+    return () => { cancelled = true; stream?.getTracks().forEach((tr) => tr.stop()) }
+  }, [facing])
+
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = '' }
+  }, [onClose])
+
+  const shoot = () => {
+    const v = videoRef.current
+    if (!v || !v.videoWidth) return
+    setFlash(true)
+    navigator.vibrate?.(40)
+    const data = downscale(v, maxSide, quality)
+    setTimeout(() => onCapture(data), 120)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black flex flex-col" role="dialog" aria-modal="true" aria-label="Take a photo">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 text-white">
+        <span className="text-lg font-semibold">Take a photo</span>
+        <button onClick={onClose} className="grid place-items-center size-12 rounded-full hover:bg-white/10" aria-label="Close camera"><X size={26} /></button>
+      </div>
+
+      <div className="relative flex-1 min-h-0 flex items-center justify-center overflow-hidden">
+        <video ref={videoRef} playsInline muted autoPlay
+          className={`max-h-full max-w-full object-contain ${facing === 'user' ? '-scale-x-100' : ''} ${ready ? '' : 'opacity-0'}`} />
+        {!ready && !error && <p className="absolute text-white/80 text-lg">Starting camera…</p>}
+        {error && (
+          <div className="absolute inset-x-6 max-w-md mx-auto text-center text-white space-y-5">
+            <p className="text-lg leading-relaxed">{error}</p>
+            <Button size="lg" icon={ImageUp} onClick={onUpload}>Upload a photo</Button>
+          </div>
+        )}
+        {flash && <div className="absolute inset-0 bg-white animate-fadein" />}
+      </div>
+
+      <div className="grid grid-cols-3 items-center px-6 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <button onClick={onUpload} className="justify-self-start flex flex-col items-center gap-1 text-white/90 text-sm min-h-12 px-2" aria-label="Upload a photo instead">
+          <ImageUp size={26} />Upload
+        </button>
+        <button onClick={shoot} disabled={!ready} aria-label="Take photo"
+          className="justify-self-center size-20 rounded-full border-4 border-white grid place-items-center disabled:opacity-40 active:scale-95 transition-transform">
+          <span className="size-[62px] rounded-full bg-white" />
+        </button>
+        {multiCam ? (
+          <button onClick={() => setFacing((f) => (f === 'environment' ? 'user' : 'environment'))} className="justify-self-end flex flex-col items-center gap-1 text-white/90 text-sm min-h-12 px-2" aria-label="Switch camera">
+            <SwitchCamera size={26} />Flip
+          </button>
+        ) : <span />}
+      </div>
+    </div>
   )
 }
 

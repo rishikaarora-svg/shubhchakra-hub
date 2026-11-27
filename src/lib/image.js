@@ -13,9 +13,10 @@ export function fileToDataUrl(file, maxSide = 768, quality = 0.8) {
   })
 }
 
+/** Works for <img> and for a live <video> frame. */
 export function downscale(img, maxSide, quality = 0.8) {
-  const w = img.naturalWidth || img.width
-  const h = img.naturalHeight || img.height
+  const w = img.videoWidth || img.naturalWidth || img.width
+  const h = img.videoHeight || img.naturalHeight || img.height
   const s = Math.min(1, maxSide / Math.max(w, h))
   const c = document.createElement('canvas')
   c.width = Math.round(w * s)
