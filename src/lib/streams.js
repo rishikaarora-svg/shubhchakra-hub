@@ -31,9 +31,10 @@ export const BINS = [
 ]
 
 export const KG_PER_MEAL = 0.5
+export const CERT_VALIDITY_MONTHS = 6
 export const EC_FINE_AVOIDED = 25000 // ₹ per compliant event
 export const FOOD_SLA_MS = 2 * 60 * 60 * 1000 // FSSAI 2-hour rescue window
-export const TRANSIT_MS = 20 * 60 * 1000 // simulated drive time venue → partner
+export const TRANSIT_MS = 20 * 60 * 1000 // modelled drive time venue → partner
 export const VARIANCE_LIMIT = 0.05 // ±5% weighbridge tolerance
 
 export const PARTNERS = {
@@ -45,8 +46,17 @@ export const PARTNERS = {
 
 export const VENUE = { name: 'Chokhi Dhani Banquet Lawn, Jaipur', event: 'Royal Heritage Wedding', ward: 'Ward 112, Tonk Road' }
 
-export function targetsFor(guests) {
-  return Object.fromEntries(STREAM_KEYS.map((k) => [k, Math.round(guests * STREAMS[k].perGuest)]))
+// Menu changes how much food and kitchen waste a guest generates; dry and sanitary stay per-guest.
+export const MENUS = [
+  { key: 'buffet', label: 'Full Indian buffet', food: 1, organic: 1 },
+  { key: 'plated', label: 'Plated sit-down dinner', food: 0.75, organic: 0.85 },
+  { key: 'live', label: 'Buffet with live counters', food: 1.15, organic: 1.2 },
+  { key: 'hitea', label: 'High tea & snacks', food: 0.5, organic: 0.6 },
+]
+
+export function targetsFor(guests, menu = 'buffet') {
+  const m = MENUS.find((x) => x.key === menu) || MENUS[0]
+  return Object.fromEntries(STREAM_KEYS.map((k) => [k, Math.round(guests * STREAMS[k].perGuest * (m[k] ?? 1))]))
 }
 
 export function destinationFor(bag) {

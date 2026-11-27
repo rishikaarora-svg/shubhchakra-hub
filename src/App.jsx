@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Building2, ScanLine, HandHeart, Recycle, RadioTower, ChartNoAxesColumn } from 'lucide-react'
+import { Building2, ScanLine, HandHeart, Recycle, RadioTower } from 'lucide-react'
 import { useStore } from './lib/store.jsx'
 import VenueAdmin from './views/VenueAdmin.jsx'
 import FieldLead from './views/FieldLead.jsx'
 import NgoPartner from './views/NgoPartner.jsx'
 import RecyclerGate from './views/RecyclerGate.jsx'
 import ControlTower from './views/ControlTower.jsx'
-import BusinessModel from './views/BusinessModel.jsx'
 
 const VIEWS = [
   { key: 'venue', icon: Building2, C: VenueAdmin },
@@ -14,7 +13,6 @@ const VIEWS = [
   { key: 'ngo', icon: HandHeart, C: NgoPartner },
   { key: 'recycler', icon: Recycle, C: RecyclerGate },
   { key: 'tower', icon: RadioTower, C: ControlTower },
-  { key: 'business', icon: ChartNoAxesColumn, C: BusinessModel },
 ]
 
 function readRoute() {
@@ -43,7 +41,7 @@ export default function App() {
   useEffect(() => { document.documentElement.lang = lang === 'hi' ? 'hi' : 'en' }, [lang])
 
   const Active = VIEWS.find((v) => v.key === view).C
-  const atRisk = state.bags.some((b) => b.stream === 'food' && b.destination === 'ngo' && b.slaDeadline && ['in_transit', 'arrived'].includes(b.status) && b.slaDeadline - (Date.now() + state.timeOffset) < 30 * 60 * 1000)
+  const atRisk = state.bags.some((b) => b.stream === 'food' && b.destination === 'ngo' && b.slaDeadline && ['in_transit', 'arrived'].includes(b.status) && b.slaDeadline - Date.now() < 30 * 60 * 1000)
 
   return (
     <div className="min-h-dvh bg-canvas text-ink pb-[calc(76px+env(safe-area-inset-bottom))] md:pb-0">
@@ -84,7 +82,7 @@ export default function App() {
         <Active go={go} params={params} />
       </main>
 
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-line grid grid-cols-6 pb-[env(safe-area-inset-bottom)] no-print" aria-label="Views">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-line grid grid-cols-5 pb-[env(safe-area-inset-bottom)] no-print" aria-label="Views">
         {VIEWS.map((v) => {
           const Icon = v.icon, on = view === v.key
           return (

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Camera, CheckCircle2, Gauge, Inbox, RotateCcw, Scale } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCircle2, Gauge, Inbox, RotateCcw, Scale, Truck } from 'lucide-react'
 import { bagFromPayload, parseQrPayload, useStore } from '../lib/store.jsx'
-import { STREAMS, VARIANCE_LIMIT, destinationFor } from '../lib/streams.js'
-import { Button, Card, CardTitle, Empty, Note, PageHeader, StatusPill, StreamBadge, Table, timeStr } from '../components/ui.jsx'
+import { STREAMS, TRANSIT_MS, VARIANCE_LIMIT, destinationFor } from '../lib/streams.js'
+import { Button, Card, CardTitle, Empty, Note, PageHeader, StatusPill, StreamBadge, Table, timeStr, useNow } from '../components/ui.jsx'
 import { CaptureButton } from '../components/Camera.jsx'
 import { QRScanner } from '../components/QR.jsx'
 
@@ -43,16 +43,12 @@ export default function RecyclerGate({ params }) {
             {msg && <Note tone="amber" className="mt-4">{msg}</Note>}
           </Card>
           <Card>
-            <CardTitle title={t('rec.queue')} subtitle={`${queue.length} bag${queue.length === 1 ? '' : 's'}`} className="mb-3" />
+            <CardTitle title="Incoming tracker" subtitle={`${queue.length} bag${queue.length === 1 ? '' : 's'} heading to your facilities`} className="mb-3" />
             {queue.length === 0 && <Empty icon={Inbox}>Nothing expected right now.</Empty>}
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {queue.map((b) => (
                 <li key={b.id}>
-                  <button onClick={() => { if (b.status !== 'arrived') dispatch({ type: 'ARRIVE', id: b.id }); setSelected(b.id) }}
-                    className={`w-full text-left rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 border transition-colors ${selected === b.id ? 'border-forest bg-sage' : 'border-line hover:bg-[#FAF8F5]'}`}>
-                    <span className="space-y-1.5"><span className="block text-lg font-semibold">{b.id}</span><StreamBadge stream={b.stream} rerouted={b.rerouted} /></span>
-                    <span className="text-right space-y-1.5"><span className="block font-semibold">{b.declaredKg} kg</span><StatusPill status={b.status} /></span>
-                  </button>
+                  <TrackerCard bag={b} selected={selected === b.id} onOpen={() => { if (b.status === 'in_transit') dispatch({ type: 'ARRIVE', id: b.id }); setSelected(b.id) }} />
                 </li>
               ))}
             </ul>
@@ -84,6 +80,52 @@ export default function RecyclerGate({ params }) {
         </Card>
       )}
     </>
+  )
+}
+
+const STAGES = ['Tagged', 'On the road', 'At the gate', 'Weighed']
+
+/** Live transit tracker for one incoming bag: progress, stage and arrival estimate. */
+function TrackerCard({ bag, selected, onOpen }) {
+  const n = useNow()
+  const s = STREAMS[bag.stream]
+  const progress = bag.status === 'arrived' ? 1 : bag.status === 'in_transit' ? Math.min(0.95, (n - bag.dispatchedAt) / TRANSIT_MS) : 0
+  const idx = bag.status === 'tagged' ? 0 : bag.status === 'in_transit' ? 1 : 2
+  const eta = bag.status === 'in_transit' ? Math.max(1, Math.ceil((bag.dispatchedAt + TRANSIT_MS - n) / 60000)) : null
+  return (
+    <button onClick={onOpen} disabled={bag.status === 'tagged'}
+      className={`w-full text-left rounded-2xl border p-4 transition-colors disabled:cursor-default ${selected ? 'border-forest bg-sage' : 'border-line hover:bg-[#FAF8F5]'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <span className="space-y-1.5"><span className="block text-lg font-semibold">{bag.id}</span><StreamBadge stream={bag.stream} rerouted={bag.rerouted} /></span>
+        <span className="text-right space-y-1.5"><span className="block font-semibold">{bag.declaredKg} kg</span><StatusPill status={bag.status} /></span>
+      </div>
+      <div className="relative h-2 rounded-full bg-track mt-5">
+        <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-1000" style={{ width: `${progress * 100}%`, background: s.color }} />
+        <Truck size={22} className="absolute -top-2.5 bg-white rounded transition-all duration-1000" style={{ left: `calc(${progress * 100}% - 11px)`, color: s.color }} />
+      </div>
+      <ol className="grid grid-cols-4 mt-3 text-[14px]">
+        {STAGES.map((st, i) => <li key={st} className={`${i <= idx ? 'text-ink font-medium' : 'text-[#A8A29E]'} ${i === 3 ? 'text-right' : i > 0 ? 'text-center' : ''}`}>{st}</li>)}
+      </ol>
+      <p className="text-muted mt-2 text-[15px]">
+        To {destinationFor(bag).name} · {bag.status === 'tagged' ? 'waiting for dispatch at the venue' : bag.status === 'in_transit' ? `arriving in about ${eta} min` : 'at the gate, tap to weigh'}
+      </p>
+    </button>
+  )
+}
+
+function Timeline({ bag }) {
+  return (
+    <div>
+      <p className="text-lg font-semibold text-ink mb-3">Tracking history</p>
+      <ol className="relative border-l-2 border-line ml-2 space-y-4">
+        {bag.history.map((h, i) => (
+          <li key={i} className="pl-5 relative">
+            <span className={`absolute -left-[7px] top-1.5 size-3 rounded-full ${i === bag.history.length - 1 ? 'bg-forest' : 'bg-[#C9C4BC]'}`} />
+            <span className="text-muted tabular-nums mr-2">{timeStr(h.at)}</span><span className="text-ink">{h.msg}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   )
 }
 
@@ -152,6 +194,8 @@ function IntakePanel({ bag, onDone }) {
         ) : (
           <Button size="lg" className="w-full" icon={Scale} disabled={!(mass > 0)} onClick={() => dispatch({ type: 'GATE_VERIFY', id: bag.id, facilityKg: Math.round(mass * 10) / 10, photo })}>{t('rec.verify')}</Button>
         )}
+
+        <div className="border-t border-line pt-6"><Timeline bag={bag} /></div>
       </div>
     </Card>
   )

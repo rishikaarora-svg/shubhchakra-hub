@@ -10,7 +10,7 @@ import { translate } from './i18n.js'
    food: in_transit/arrived + NGO reject or SLA breach → rerouted (in_transit to compost MRF)
 */
 
-const STORAGE_KEY = 'shubhchakra-hub-state-v2'
+const STORAGE_KEY = 'shubhchakra-hub-state-v3'
 const MIN = 60 * 1000
 
 export const nextBagId = (state, stream) => `${STREAMS[stream].code}-${state.seq[stream]}`
@@ -38,8 +38,10 @@ function seedState() {
   }
   return {
     lang: 'en',
-    timeOffset: 0,
-    event: { venue: VENUE.name, name: VENUE.event, guests: 500, registered: false, cpcbId: null, registeredAt: null },
+    event: {
+      venue: VENUE.name, name: VENUE.event, guests: 500, menu: 'buffet', start: '19:00', end: '01:00', autoIntimation: true,
+      registered: false, cpcbId: null, registeredAt: null,
+    },
     // newest first; opening numbers: 225.3 / 240 kg diverted (93.9%), 150 meals, 201.6 kg CO2e
     bags: [
       seed('FR-1042', 'crate', 1, 15, 'tagged', 3),
@@ -77,11 +79,12 @@ function reducer(state, a) {
       return { ...seedState(), lang: state.lang }
     case 'SET_LANG':
       return { ...state, lang: a.lang }
-    case 'SET_GUESTS':
-      return { ...state, event: { ...state.event, guests: a.guests } }
+    case 'SET_EVENT':
+      if (state.event.registered) return state
+      return { ...state, event: { ...state.event, ...a.patch } }
     case 'REGISTER_EVENT':
       return addLog({ ...state, event: { ...state.event, registered: true, cpcbId: 'CPCB-BWG-2026-JPR-8842', registeredAt: at } }, at,
-        `Event registered. CPCB intimation CPCB-BWG-2026-JPR-8842 filed for ${state.event.guests} guests`, 'success')
+        `${state.event.name} registered at ${state.event.venue} for ${state.event.guests} guests. CPCB event ID CPCB-BWG-2026-JPR-8842${state.event.autoIntimation ? ', 3-day municipal intimation filed' : ''}`, 'success')
     case 'CREATE_BAG': {
       const id = nextBagId(state, a.bag.stream)
       const bag = {
@@ -131,8 +134,15 @@ function reducer(state, a) {
       const b = s.bags.find((x) => x.id === a.id)
       return addLog(s, at, `${a.id} ${b.status === 'verified' ? 'verified' : 'flagged'} at facility (${a.facilityKg} kg)`, b.status === 'verified' ? 'success' : 'error')
     }
-    case 'FAST_FORWARD':
-      return addLog({ ...state, timeOffset: state.timeOffset + a.ms }, at + a.ms, `Clock moved forward ${Math.round(a.ms / MIN)} min`)
+    case 'FAST_FORWARD': {
+      // Demo shortcut: ages every bag that is on the move instead of moving the clock,
+      // so activity times always show the real time.
+      const moving = (b) => ['in_transit', 'arrived'].includes(b.status)
+      const shift = (v) => (v == null ? v : v - a.ms)
+      const count = state.bags.filter(moving).length
+      const bags = state.bags.map((b) => (moving(b) ? { ...b, dispatchedAt: shift(b.dispatchedAt), arrivedAt: shift(b.arrivedAt), slaDeadline: shift(b.slaDeadline) } : b))
+      return addLog({ ...state, bags }, at, `Skipped ${Math.round(a.ms / MIN)} minutes ahead for ${count} bag${count === 1 ? '' : 's'} on the move`)
+    }
     case 'TICK': {
       let s = state
       for (const b of state.bags) {
@@ -158,7 +168,7 @@ export function computeMetrics(state) {
   const diverted = bags.filter(isDiverted).reduce((s, b) => s + bagKg(b), 0)
   const closed = bags.filter(isClosed).reduce((s, b) => s + bagKg(b), 0)
   const generated = bags.reduce((s, b) => s + bagKg(b), 0)
-  const targets = targetsFor(state.event.guests)
+  const targets = targetsFor(state.event.guests, state.event.menu)
   const targetTotal = Object.values(targets).reduce((a, b) => a + b, 0)
   const base = Math.max(targetTotal, closed) // grows if the event produces more than estimated
   const byStream = Object.fromEntries(STREAM_KEYS.map((k) => [k, bags.filter((b) => finalStream(b) === k).reduce((s, b) => s + bagKg(b), 0)]))
@@ -183,8 +193,8 @@ export function StoreProvider({ children }) {
   const [state, rawDispatch] = useReducer(reducer, undefined, load)
   const stateRef = useRef(state)
   stateRef.current = state
-  const now = useCallback(() => Date.now() + stateRef.current.timeOffset, [])
-  const dispatch = useCallback((a) => rawDispatch({ now: Date.now() + stateRef.current.timeOffset, ...a }), [])
+  const now = useCallback(() => Date.now(), [])
+  const dispatch = useCallback((a) => rawDispatch({ now: Date.now(), ...a }), [])
 
   // persist + cross-tab sync (a phone-sized tab and a projector tab share one live demo)
   const fromStorage = useRef(false)
@@ -203,7 +213,7 @@ export function StoreProvider({ children }) {
 
   // time-driven transitions (transit arrival, SLA fallback)
   useEffect(() => {
-    const id = setInterval(() => rawDispatch({ type: 'TICK', now: Date.now() + stateRef.current.timeOffset }), 1000)
+    const id = setInterval(() => rawDispatch({ type: 'TICK', now: Date.now() }), 1000)
     return () => clearInterval(id)
   }, [])
 

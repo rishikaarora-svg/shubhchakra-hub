@@ -1,15 +1,30 @@
 import { useState } from 'react'
 import { Award, ClipboardCheck, FileJson, FileSpreadsheet, FileText, Printer } from 'lucide-react'
 import { useStore } from '../lib/store.jsx'
-import { STREAMS, STREAM_KEYS, VENUE, bagKg, destinationFor, fmtINR, fmtKg } from '../lib/streams.js'
-import { AnimatedNumber, Button, Card, CardTitle, KeyValue, Note, PageHeader, Stat, StatusPill, StreamBadge, Table } from '../components/ui.jsx'
+import { CERT_VALIDITY_MONTHS, MENUS, STREAMS, STREAM_KEYS, VENUE, destinationFor, fmtINR, fmtKg } from '../lib/streams.js'
+import { AnimatedNumber, Button, Card, CardTitle, KeyValue, Note, PageHeader, Stat } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
+
+const INPUT = 'w-full min-h-12 px-4 rounded-2xl border border-line bg-white text-base text-ink focus:outline-2 focus:outline-mint disabled:bg-[#FAF8F5]'
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="block text-muted mb-1.5">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+const addMonths = (ms, months) => { const d = new Date(ms); d.setMonth(d.getMonth() + months); return d }
+const menuLabel = (key) => MENUS.find((x) => x.key === key)?.label || key
 
 export default function VenueAdmin() {
   const { state, dispatch, metrics: m, t, lang } = useStore()
   const { event } = state
   const [certOpen, setCertOpen] = useState(false)
   const fill = ((event.guests - 100) / 1900) * 100
+  const set = (patch) => dispatch({ type: 'SET_EVENT', patch })
 
   return (
     <>
@@ -18,20 +33,47 @@ export default function VenueAdmin() {
 
       <div className="grid lg:grid-cols-2 gap-6">
         <Card>
-          <CardTitle title={t('venue.reg')} className="mb-2" />
-          <KeyValue k={t('venue.venue')} v={event.venue} />
-          <KeyValue k={t('venue.event')} v={event.name} />
-          <KeyValue k={t('venue.category')} v={t('venue.categoryValue')} />
+          <CardTitle title={t('venue.reg')} subtitle={event.registered ? 'Details are locked once the CPCB event ID is created.' : 'The waste estimate updates from guest count and menu.'} className="mb-6" />
+          <fieldset disabled={event.registered} className="space-y-5 disabled:opacity-80">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Field label="Venue"><input className={INPUT} value={event.venue} onChange={(e) => set({ venue: e.target.value })} placeholder="Venue name" /></Field>
+              <Field label="Event title"><input className={INPUT} value={event.name} onChange={(e) => set({ name: e.target.value })} placeholder="Event title" /></Field>
+            </div>
 
-          <div className="mt-7">
-            <label htmlFor="guests" className="block text-lg font-semibold text-ink">{t('venue.guests')}</label>
-            <div className="text-5xl font-bold text-forest mt-1 tracking-tight">{event.guests}</div>
-            <input id="guests" type="range" className="range mt-4" min={100} max={2000} step={50} value={event.guests} disabled={event.registered}
-              style={{ '--fill': `${fill}%` }} onChange={(e) => dispatch({ type: 'SET_GUESTS', guests: Number(e.target.value) })} />
-            {event.registered && <p className="text-[15px] text-muted mt-1">Locked after registration.</p>}
+            <div>
+              <div className="flex items-end justify-between gap-3">
+                <label htmlFor="guests" className="text-lg font-semibold text-ink">{t('venue.guests')}</label>
+                <span className="text-4xl font-bold text-forest tracking-tight">{event.guests}</span>
+              </div>
+              <input id="guests" type="range" className="range mt-2" min={100} max={2000} step={50} value={event.guests}
+                style={{ '--fill': `${fill}%` }} onChange={(e) => set({ guests: Number(e.target.value) })} />
+              <div className="flex justify-between text-[15px] text-muted"><span>100</span><span>2,000</span></div>
+            </div>
+
+            <Field label="Menu">
+              <select className={INPUT} value={event.menu} onChange={(e) => set({ menu: e.target.value })}>
+                {MENUS.map((mn) => <option key={mn.key} value={mn.key}>{mn.label}</option>)}
+              </select>
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Starts"><input type="time" className={INPUT} value={event.start} onChange={(e) => set({ start: e.target.value })} /></Field>
+              <Field label="Ends"><input type="time" className={INPUT} value={event.end} onChange={(e) => set({ end: e.target.value })} /></Field>
+            </div>
+
+            <label className="flex items-center justify-between gap-4 rounded-2xl border border-line px-5 py-4 cursor-pointer">
+              <span>
+                <span className="block font-semibold text-ink">Auto-submit 3-day municipal event intimation</span>
+                <span className="block text-muted text-[15px] mt-0.5">Applies to events over 100 guests. Filed to the CPCB portal with the event ID.</span>
+              </span>
+              <input type="checkbox" className="sr-only peer" checked={event.autoIntimation} onChange={(e) => set({ autoIntimation: e.target.checked })} />
+              <span aria-hidden className="relative shrink-0 w-14 h-8 rounded-full bg-[#D6D1C8] peer-checked:bg-forest transition-colors after:absolute after:top-1 after:left-1 after:size-6 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:after:translate-x-6 peer-focus-visible:outline-2 peer-focus-visible:outline-mint" />
+            </label>
+          </fieldset>
+
+          <div className="flex items-baseline justify-between mt-6 mb-3">
+            <p className="text-muted">{t('venue.estimate')}</p>
+            <p className="font-semibold text-ink">{m.targetTotal} kg total</p>
           </div>
-
-          <p className="text-muted mt-6 mb-3">{t('venue.estimate')}</p>
           <div className="grid grid-cols-2 gap-3">
             {STREAM_KEYS.map((k) => (
               <div key={k} className="rounded-xl border-l-4 px-4 sm:px-5 py-4" style={{ background: STREAMS[k].soft, borderColor: STREAMS[k].color }}>
@@ -45,7 +87,7 @@ export default function VenueAdmin() {
             {event.registered ? (
               <Note>✅ {t('venue.registered')} <b className="font-mono font-bold break-all">{event.cpcbId}</b></Note>
             ) : (
-              <Button size="lg" className="w-full" icon={ClipboardCheck} onClick={() => dispatch({ type: 'REGISTER_EVENT' })}>{t('venue.register')}</Button>
+              <Button size="lg" className="w-full" icon={ClipboardCheck} disabled={!event.venue.trim() || !event.name.trim()} onClick={() => dispatch({ type: 'REGISTER_EVENT' })}>{t('venue.register')}</Button>
             )}
           </div>
         </Card>
@@ -68,21 +110,6 @@ export default function VenueAdmin() {
         </Card>
       </div>
 
-      <Card className="mt-6">
-        <CardTitle title={t('venue.ledger')} className="mb-3" />
-        <Table head={[t('col.bag'), t('col.stream'), t('col.kg'), t('col.handler'), t('col.status')]} minWidth={720}>
-          {state.bags.map((b) => (
-            <tr key={b.id}>
-              <td className="font-semibold whitespace-nowrap">{b.id}</td>
-              <td><StreamBadge stream={b.stream} rerouted={b.rerouted} /></td>
-              <td className="tabular-nums">{bagKg(b)}</td>
-              <td className="whitespace-nowrap">{destinationFor(b).name}</td>
-              <td><StatusPill status={b.status} /></td>
-            </tr>
-          ))}
-        </Table>
-      </Card>
-
       <Modal open={certOpen} onClose={() => setCertOpen(false)} title="EBWGR & CPCB return package" wide>
         <CertificatePackage />
       </Modal>
@@ -102,7 +129,7 @@ function buildReturn(state, m) {
     schema: 'EBWGR-CPCB-Return/2026.1',
     generatedAt: new Date().toISOString(),
     generator: { name: state.event.venue, ward: VENUE.ward, category: 'Bulk Waste Generator (>100 kg/day)', city: 'Jaipur', state: 'Rajasthan' },
-    event: { name: state.event.name, guests: state.event.guests, cpcbIntimationId: state.event.cpcbId },
+    event: { name: state.event.name, guests: state.event.guests, menu: menuLabel(state.event.menu), start: state.event.start, end: state.event.end, municipalIntimation: state.event.autoIntimation, cpcbIntimationId: state.event.cpcbId },
     totals: { divertedKg: Number(m.diverted.toFixed(1)), baselineKg: Number(m.base.toFixed(1)), diversionPct: Number(m.pct.toFixed(1)), foodRescuedKg: m.rescuedFood, mealsRescued: m.meals, co2eSavedKg: m.co2, ecPenaltyAvoidedINR: m.ecAvoided },
     streams: Object.fromEntries(STREAM_KEYS.map((k) => [STREAMS[k].label.en, { kg: Number(m.byStream[k].toFixed(1)) }])),
     custodyChain: state.bags.map((b) => ({
@@ -110,7 +137,7 @@ function buildReturn(state, m) {
       variancePct: b.variance != null ? Number((b.variance * 100).toFixed(2)) : null, status: b.status, handler: destinationFor(b).name,
       events: b.history.map((h) => ({ at: new Date(h.at).toISOString(), event: h.msg })),
     })),
-    validity: { years: 3, validUntil: new Date(Date.now() + 3 * 365 * 864e5).toISOString().slice(0, 10) },
+    validity: { months: CERT_VALIDITY_MONTHS, issuedOn: new Date(state.event.registeredAt || Date.now()).toISOString().slice(0, 10), validUntil: addMonths(state.event.registeredAt || Date.now(), CERT_VALIDITY_MONTHS).toISOString().slice(0, 10) },
   }
 }
 
@@ -140,13 +167,15 @@ function CertificatePackage() {
               <h3 className="text-2xl font-bold text-forest mt-1">EBWGR compliance & CPCB return</h3>
               <p className="text-muted mt-1">Solid Waste Management Rules 2026 · FSSAI surplus food recovery</p>
             </div>
-            <span className="shrink-0 text-center rounded-2xl bg-forest text-white px-4 py-3"><span className="block text-3xl font-bold leading-none">3</span><span className="text-sm font-medium">year validity</span></span>
+            <span className="shrink-0 text-center rounded-2xl bg-forest text-white px-4 py-3"><span className="block text-3xl font-bold leading-none">{CERT_VALIDITY_MONTHS}</span><span className="text-sm font-medium">month validity</span></span>
           </div>
           <div className="grid sm:grid-cols-2 gap-x-8 py-2">
             <KeyValue k="CPCB reference" v={<span className="font-mono">{ref}</span>} />
             <KeyValue k="Valid until" v={ret.validity.validUntil} />
             <KeyValue k="Generator" v={state.event.venue} />
             <KeyValue k="Event" v={`${state.event.name}, ${state.event.guests} guests`} />
+            <KeyValue k="Issued on" v={ret.validity.issuedOn} />
+            <KeyValue k="Menu & timing" v={`${menuLabel(state.event.menu)}, ${state.event.start}–${state.event.end}`} />
           </div>
           <table className="w-full text-base my-5">
             <thead><tr className="text-left text-muted border-b border-line"><th className="py-2 font-medium">Stream</th><th className="py-2 font-medium text-right">Weight</th><th className="py-2 pl-6 font-medium">Processed by</th></tr></thead>

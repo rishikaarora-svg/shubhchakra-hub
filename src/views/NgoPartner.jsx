@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { BellRing, Camera, CheckCircle2, MessageCircle, Navigation, Truck, Undo2, UtensilsCrossed } from 'lucide-react'
 import { bagFromPayload, parseQrPayload, useStore } from '../lib/store.jsx'
-import { KG_PER_MEAL, PARTNERS, TRANSIT_MS, VENUE } from '../lib/streams.js'
+import { KG_PER_MEAL, PARTNERS, TRANSIT_MS } from '../lib/streams.js'
 import { Button, Card, CardTitle, Empty, Note, PageHeader, SlaTimer, StatusPill, timeStr, useNow } from '../components/ui.jsx'
 import { CaptureButton } from '../components/Camera.jsx'
 import { QRScanner } from '../components/QR.jsx'
@@ -89,7 +89,7 @@ export default function NgoPartner({ params }) {
 }
 
 function IncomingCard({ bag, focused }) {
-  const { dispatch, t } = useStore()
+  const { dispatch, t, state } = useStore()
   const n = useNow()
   const progress = bag.status === 'arrived' ? 1 : bag.dispatchedAt ? Math.min(0.95, (n - bag.dispatchedAt) / TRANSIT_MS) : 0
   const stages = ['Packed', 'On the road', 'Arrived', 'Handed over']
@@ -100,7 +100,7 @@ function IncomingCard({ bag, focused }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-2xl font-bold text-ink">{bag.id}</p>
-          <p className="text-muted mt-0.5">{bag.declaredKg} kg · about {Math.round(bag.declaredKg / KG_PER_MEAL)} meals · from {VENUE.name.split(',')[0]}</p>
+          <p className="text-muted mt-0.5">{bag.declaredKg} kg · about {Math.round(bag.declaredKg / KG_PER_MEAL)} meals · from {state.event.venue.split(',')[0]}</p>
         </div>
         {bag.slaDeadline ? <SlaTimer deadline={bag.slaDeadline} /> : <StatusPill status={bag.status} />}
       </div>
@@ -132,11 +132,11 @@ function IncomingCard({ bag, focused }) {
 }
 
 function WhatsAppReceipt({ bag }) {
-  const { t } = useStore()
+  const { t, state } = useStore()
   const meals = Math.round(bag.declaredKg / KG_PER_MEAL)
   const text = bag.rerouted
     ? `ShubhChakra Hub ♻️\nBatch ${bag.id} (${bag.declaredKg} kg) was sent to ${PARTNERS.compost.name} for composting.\nReason: ${bag.rerouteReason}.\nCompliance record intact.`
-    : `ShubhChakra Hub ✅ Handover proof\nBag: ${bag.id}\nFrom: ${VENUE.name}\nTo: ${PARTNERS.ngo.name}\nQuantity: ${bag.declaredKg} kg (about ${meals} meals)\nTime: ${bag.closedAt ? new Date(bag.closedAt).toLocaleString('en-IN') : ''}\nFood safety check: passed\nResponsibility closed under SWM Rules 2026.`
+    : `ShubhChakra Hub ✅ Handover proof\nBag: ${bag.id}\nFrom: ${state.event.venue}\nTo: ${PARTNERS.ngo.name}\nQuantity: ${bag.declaredKg} kg (about ${meals} meals)\nTime: ${bag.closedAt ? new Date(bag.closedAt).toLocaleString('en-IN') : ''}\nFood safety check: passed\nResponsibility closed under SWM Rules 2026.`
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="bg-[#075E54] text-white px-6 py-4 flex items-center gap-2.5"><MessageCircle size={20} /><span className="text-lg font-semibold">{t('ngo.receipt')}</span></div>

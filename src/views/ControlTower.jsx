@@ -1,7 +1,8 @@
-import { AlarmClock, Camera, CheckCircle2, FastForward, RotateCcw, Send, Truck, Zap } from 'lucide-react'
-import { nextBagId, useStore } from '../lib/store.jsx'
-import { BINS, PARTNERS, STREAMS, TRANSIT_MS, bagKg, destinationFor } from '../lib/streams.js'
-import { Button, Card, CardTitle, PageHeader, SlaTimer, Stat, StatusPill, StreamBadge, Table, fmtDuration, timeStr, useNow } from '../components/ui.jsx'
+import { useState } from 'react'
+import { Camera, FastForward, RotateCcw, Send } from 'lucide-react'
+import { useStore } from '../lib/store.jsx'
+import { PARTNERS, STREAMS, TRANSIT_MS, bagKg, destinationFor } from '../lib/streams.js'
+import { Button, Card, CardTitle, PageHeader, SlaTimer, Stat, StatusPill, Table, fmtDuration, timeStr, useNow } from '../components/ui.jsx'
 
 // Stylised Jaipur layout (not to scale), viewBox 600×420
 const NODES = {
@@ -27,30 +28,23 @@ const WARDS = [
 const destNode = (b) => (b.destination === 'ngo' ? 'ngo' : b.stream === 'sanitary' ? 'incinerator' : b.stream === 'dry' ? 'recycler' : 'compost')
 
 export default function ControlTower({ go }) {
-  const { state, dispatch, metrics: m, t, now } = useStore()
+  const { state, dispatch, metrics: m, t, lang } = useStore()
   const n = useNow()
   const custody = state.bags.filter((b) => ['tagged', 'in_transit', 'arrived'].includes(b.status))
   const atRisk = custody.filter((b) => b.slaDeadline && b.destination === 'ngo' && b.slaDeadline - n < 30 * 60 * 1000)
-  const foodOpen = custody.filter((b) => b.destination === 'ngo' && b.slaDeadline)
-  const tagged = custody.filter((b) => b.status === 'tagged')
-
-  const spawnFood = () => {
-    const id = nextBagId(state, 'food')
-    dispatch({ type: 'CREATE_BAG', bag: { stream: 'food', bin: 'drum', qty: 1, declaredKg: BINS[1].kg, ai: { source: 'local', confidence: 0.9, stream: 'food' }, safetyCheck: { passed: true } } })
-    dispatch({ type: 'DISPATCH', id })
-  }
-  const jumpToBreach = () => {
-    const next = Math.min(...foodOpen.map((b) => b.slaDeadline))
-    if (Number.isFinite(next)) dispatch({ type: 'FAST_FORWARD', ms: Math.max(0, next - now()) + 2000 })
-  }
-  const dispatchTagged = () => tagged.forEach((b) => dispatch({ type: 'DISPATCH', id: b.id }))
-  const arriveAll = () => custody.filter((b) => b.status === 'in_transit').forEach((b) => dispatch({ type: 'ARRIVE', id: b.id }))
-  const closeGates = () => custody.filter((b) => b.destination === 'recycler' && b.status !== 'tagged').forEach((b) => dispatch({ type: 'GATE_VERIFY', id: b.id, facilityKg: Math.round(b.declaredKg * (0.98 + Math.random() * 0.03) * 10) / 10 }))
+  const [filter, setFilter] = useState('all')
+  const isOpen = (b) => ['tagged', 'in_transit', 'arrived'].includes(b.status)
+  const lastUpdate = (b) => b.history[b.history.length - 1]?.at || b.createdAt
+  // Every bag today: open ones first (oldest dispatch first), then completed ones (most recent first)
+  const tracked = [...state.bags]
+    .filter((b) => filter === 'all' || (filter === 'open' ? isOpen(b) : !isOpen(b)))
+    .sort((x, y) => (isOpen(y) - isOpen(x)) || (isOpen(x) ? (x.dispatchedAt || x.createdAt) - (y.dispatchedAt || y.createdAt) : lastUpdate(y) - lastUpdate(x)))
+  const doneCount = state.bags.length - custody.length
 
   return (
     <>
       <PageHeader title={t('nav.tower')} subtitle={t('tower.subtitle')}
-        action={<p className="text-lg text-muted">Clock {new Date(n).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}{state.timeOffset > 0 && <span className="text-[#B45309] font-semibold"> (+{Math.round(state.timeOffset / 60000)} min)</span>}</p>} />
+        action={<p className="text-lg text-muted">Now {new Date(n).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Stat value={custody.length} label="Bags in transit or waiting" />
@@ -109,15 +103,9 @@ export default function ControlTower({ go }) {
 
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardTitle title={t('tower.ff')} subtitle="Shortcuts for a smooth live demo" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
-              <Button variant="outline" icon={Zap} onClick={spawnFood}>New food dispatch</Button>
-              <Button variant="outline" icon={Send} onClick={dispatchTagged} disabled={!tagged.length}>Dispatch tagged bags</Button>
-              <Button variant="outline" icon={Truck} onClick={arriveAll} disabled={!custody.some((b) => b.status === 'in_transit')}>All vehicles arrive</Button>
-              <Button variant="outline" icon={FastForward} onClick={() => dispatch({ type: 'FAST_FORWARD', ms: 15 * 60000 })}>Skip 15 minutes</Button>
-              <Button variant="outline" icon={AlarmClock} onClick={jumpToBreach} disabled={!foodOpen.length}>Expire food window</Button>
-              <Button variant="outline" icon={CheckCircle2} onClick={closeGates} disabled={!custody.some((b) => b.destination === 'recycler' && b.status !== 'tagged')}>Check in all at facility</Button>
-            </div>
+            <CardTitle title={t('tower.ff')} subtitle="For a smooth live presentation" />
+            <Button variant="outline" icon={FastForward} className="w-full" onClick={() => dispatch({ type: 'FAST_FORWARD', ms: 15 * 60000 })} disabled={!custody.some((b) => b.status !== 'tagged')}>Skip 15 minutes</Button>
+            <p className="text-[15px] text-muted mt-2">Moves every bag on the road 15 minutes further along. Activity times stay real.</p>
             <Button variant="danger" icon={RotateCcw} className="w-full mt-3" onClick={() => { if (confirm('Reset the demo to its starting state?')) dispatch({ type: 'RESET' }) }}>Reset demo</Button>
           </Card>
 
@@ -136,30 +124,49 @@ export default function ControlTower({ go }) {
       </div>
 
       <Card className="mt-6">
-        <CardTitle title={t('tower.audit')} subtitle={`Food not handed over within 2 hours is automatically sent to ${PARTNERS.compost.name} for composting.`} className="mb-3" />
-        <Table head={['Bag', 'Stream', 'kg', 'Going to', 'Status', 'Time', 'Photo proof']} minWidth={980}>
-          {custody.length === 0 && <tr><td colSpan="7" className="text-center text-muted !py-10">All bags are closed. Use “New food dispatch” or the Field Coordinator page to start another.</td></tr>}
-          {custody.map((b) => (
-            <tr key={b.id}>
-              <td className="font-semibold whitespace-nowrap">{b.id}</td>
-              <td><StreamBadge stream={b.stream} rerouted={b.rerouted} /></td>
-              <td className="tabular-nums">{bagKg(b)}</td>
-              <td className="whitespace-nowrap">{destinationFor(b).name}</td>
-              <td><StatusPill status={b.status} /></td>
-              <td>{b.slaDeadline && b.destination === 'ngo' ? <SlaTimer deadline={b.slaDeadline} /> : <span className="text-muted tabular-nums whitespace-nowrap">{b.dispatchedAt ? `${fmtDuration(n - b.dispatchedAt)} ago` : 'Not dispatched'}</span>}</td>
-              <td>
-                {b.status === 'tagged' ? <Button size="sm" variant="outline" icon={Send} onClick={() => dispatch({ type: 'DISPATCH', id: b.id })}>Dispatch</Button>
-                  : b.destination !== 'ngo' ? <span className="text-muted">Taken at the gate</span>
-                  : b.proof?.fulfilledAt ? (
-                    <span className="flex items-center gap-2.5">{b.proof.photo && <img src={b.proof.photo} alt="" className="size-10 rounded-lg object-cover ring-1 ring-line" />}<span className="text-forest font-semibold whitespace-nowrap">Received {timeStr(b.proof.fulfilledAt)}</span></span>
-                  ) : b.proof?.requestedAt ? (
-                    <button onClick={() => go('ngo', { bagId: b.id })} className="text-[#B45309] font-semibold underline underline-offset-4 whitespace-nowrap">Waiting for NGO…</button>
-                  ) : (
-                    <Button size="sm" variant="outline" icon={Camera} onClick={() => dispatch({ type: 'REQUEST_PROOF', id: b.id })}>{t('tower.requestProof')}</Button>
-                  )}
-              </td>
-            </tr>
-          ))}
+        <CardTitle title="Live bag tracker" subtitle={`Every bag tonight, updated as each partner acts. Food not handed over within 2 hours is sent to ${PARTNERS.compost.name} for composting.`}
+          right={
+            <div className="flex gap-1 p-1 bg-[#EEEBE5] rounded-2xl max-w-full overflow-x-auto scrollbar-none" role="tablist" aria-label="Filter bags">
+              {[['all', `All (${state.bags.length})`], ['open', `In progress (${custody.length})`], ['done', `Completed (${doneCount})`]].map(([k, l]) => (
+                <button key={k} role="tab" aria-selected={filter === k} onClick={() => setFilter(k)} className={`min-h-10 px-4 rounded-xl text-[15px] font-semibold whitespace-nowrap ${filter === k ? 'bg-white shadow-sm text-forest' : 'text-muted'}`}>{l}</button>
+              ))}
+            </div>
+          } className="mb-3" />
+        <Table head={['Bag', 'Handler', 'Status', 'Time', 'Latest update', 'Action']} minWidth={900}>
+          {tracked.length === 0 && <tr><td colSpan="6" className="text-center text-muted !py-10">No bags here yet.</td></tr>}
+          {tracked.map((b) => {
+            const last = b.history[b.history.length - 1]
+            return (
+              <tr key={b.id} className={isOpen(b) ? '' : 'bg-[#FCFBF9]'}>
+                <td className="whitespace-nowrap">
+                  <span className="block font-semibold">{b.id}</span>
+                  <span className="flex items-center gap-1.5 text-[15px] text-muted">
+                    <span className="size-2.5 rounded-full shrink-0" style={{ background: STREAMS[b.stream].color }} />
+                    {STREAMS[b.stream].label[lang].split(' ')[0]}{b.rerouted ? ' → compost' : ''} · <span className="tabular-nums">{bagKg(b)} kg</span>
+                  </span>
+                </td>
+                <td className="min-w-32">{destinationFor(b).name}</td>
+                <td><StatusPill status={b.status} /></td>
+                <td className="whitespace-nowrap">
+                  {!isOpen(b) ? <span className="text-muted">Closed {timeStr(b.closedAt)}</span>
+                    : b.slaDeadline && b.destination === 'ngo' ? <SlaTimer deadline={b.slaDeadline} />
+                    : <span className="text-muted tabular-nums">{b.dispatchedAt ? `${fmtDuration(n - b.dispatchedAt)} on the move` : 'Not dispatched'}</span>}
+                </td>
+                <td className="min-w-48"><span className="text-muted tabular-nums mr-2">{timeStr(last.at)}</span>{last.msg}</td>
+                <td>
+                  {b.status === 'tagged' ? <Button size="sm" variant="outline" icon={Send} onClick={() => dispatch({ type: 'DISPATCH', id: b.id })}>Dispatch</Button>
+                    : b.destination !== 'ngo' ? <span className="text-muted whitespace-nowrap">{b.arrivalPhoto ? 'Gate photo on file' : isOpen(b) ? 'Taken at the gate' : '—'}</span>
+                    : b.proof?.fulfilledAt ? (
+                      <span className="flex items-center gap-2.5">{b.proof.photo && <img src={b.proof.photo} alt="" className="size-10 rounded-lg object-cover ring-1 ring-line" />}<span className="text-forest font-semibold whitespace-nowrap">Received {timeStr(b.proof.fulfilledAt)}</span></span>
+                    ) : b.proof?.requestedAt ? (
+                      <button onClick={() => go('ngo', { bagId: b.id })} className="text-[#B45309] font-semibold underline underline-offset-4 whitespace-nowrap">Waiting for NGO…</button>
+                    ) : isOpen(b) ? (
+                      <Button size="sm" variant="outline" icon={Camera} onClick={() => dispatch({ type: 'REQUEST_PROOF', id: b.id })}>{t('tower.requestProof')}</Button>
+                    ) : <span className="text-muted">—</span>}
+                </td>
+              </tr>
+            )
+          })}
         </Table>
       </Card>
     </>
