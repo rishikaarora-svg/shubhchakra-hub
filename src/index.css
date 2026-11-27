@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest: #1B4D3E;
+  --color-forest-dark: #143B30;
+  --color-mint: #2E9E6B;
+  --color-sage: #E4EEE8;
+  --color-canvas: #F4F2EE;
+  --color-ink: #1C1F23;
+  --color-muted: #5F6670;
+  --color-line: #E6E1D9;
+  --color-track: #ECE8E1;
+  --color-crimson: #DC2626;
+  --color-cobalt: #2563EB;
+  --color-violet: #7C3AED;
+  --font-sans: Inter, "Noto Sans Devanagari", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --animate-scan: scan 1.6s ease-in-out infinite alternate;
+  --animate-fadein: fadein 0.4s ease-out both;
+}
+
+@keyframes scan { from { top: 8%; } to { top: 92%; } }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+html { -webkit-tap-highlight-color: transparent; }
+body { background: var(--color-canvas); color: var(--color-ink); font-family: var(--font-sans); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; font-feature-settings: "tnum" 1, "cv11" 1; }
+input[type="range"] { touch-action: pan-y; }
+
+/* Slider styled like the reference: thin grey track, round thumb */
+.range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; }
+.range::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: linear-gradient(to right, #C9C4BC var(--fill, 50%), #ECE8E1 var(--fill, 50%)); border: 1px solid #DDD7CE; }
+.range::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -10px; border-radius: 50%; background: #D3CEC6; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); cursor: pointer; }
+.range::-moz-range-track { height: 6px; border-radius: 999px; background: #ECE8E1; border: 1px solid #DDD7CE; }
+.range::-moz-range-progress { height: 6px; border-radius: 999px; background: #C9C4BC; }
+.range::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #D3CEC6; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.range:disabled { opacity: .7; }
+.range:focus-visible { outline: 2px solid var(--color-mint); outline-offset: 4px; border-radius: 8px; }
+
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+/* Print: only the open certificate (or a QR tag when no modal is open) */
+@media print {
+  .no-print, header, nav { display: none !important; }
+  body:has(.print-modal-root) #root > div > *:not(.print-modal-root) { display: none !important; }
+  .print-modal-root { position: static !important; display: block !important; }
+  .print-modal { max-height: none !important; box-shadow: none !important; overflow: visible !important; background: white !important; }
+  body:not(:has(.print-modal-root)) main * { visibility: hidden; }
+  body:not(:has(.print-modal-root)) .print-tag, body:not(:has(.print-modal-root)) .print-tag * { visibility: visible; }
+  body:not(:has(.print-modal-root)) .print-tag { position: absolute; top: 0; left: 0; width: 320px; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

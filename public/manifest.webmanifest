@@ -1,0 +1,10 @@
+{
+  "name": "ShubhChakra Hub",
+  "short_name": "ShubhChakra",
+  "description": "Event waste orchestration & SWM Rules 2026 compliance middleware",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F2EE",
+  "theme_color": "#1B4D3E",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
