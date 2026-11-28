@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Cpu, ImageUp, RefreshCw, ScanEye, Sparkles, SwitchCamera, X } from 'lucide-react'
 import { downscale, fileToDataUrl } from '../lib/image.js'
-import { geminiTimeout, warmUpAI } from '../lib/gemini.js'
+import { warmUpAI } from '../lib/gemini.js'
 import { STREAMS } from '../lib/streams.js'
 import { useStore } from '../lib/store.jsx'
 import { Button, FoodList, dietSummary } from './ui.jsx'
@@ -152,11 +152,16 @@ export function AIPhoto({ photo, result, analyzing }) {
           </div>
         )
       })}
-      {result && (
+      {result && !result.unverified && (
         <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
           <Chip>{result.sealIntact ? '✓ Seal intact' : '⚠ Seal open'}</Chip>
           <Chip>{result.contamination === 'none' ? '✓ No contamination' : `⚠ Contamination: ${result.contamination}`}</Chip>
           <Chip>{Math.round(result.confidence * 100)}% confidence</Chip>
+        </div>
+      )}
+      {result?.unverified && (
+        <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+          <Chip>{result.liveStillRunning ? 'Gemini is still checking…' : 'Not checked by AI'}</Chip>
         </div>
       )}
     </div>
@@ -168,15 +173,32 @@ const Chip = ({ children }) => <span className="text-sm font-semibold bg-white/9
 export function AIVerdict({ result, expected }) {
   const { lang } = useStore()
   if (!result) return null
+  if (result.unverified) {
+    return (
+      <div className="rounded-2xl px-5 py-4 text-base bg-[#FEF5E6]">
+        {result.liveStillRunning ? (
+          <>
+            <p className="font-semibold text-ink flex items-center gap-2"><RefreshCw size={18} className="animate-spin shrink-0 text-forest" />Gemini is still checking this photo</p>
+            <p className="text-muted mt-1">{expected === 'food' ? 'You can continue. The dishes will fill in automatically in a few seconds.' : 'You can continue. The result will fill in automatically in a few seconds.'}</p>
+          </>
+        ) : (
+          <>
+            <p className="font-semibold text-ink flex items-center gap-2"><Cpu size={18} className="shrink-0 text-[#B45309]" />Couldn’t check this photo with AI</p>
+            <p className="text-muted mt-1">{result.fallbackReason}. {expected === 'food' ? 'Add the dishes yourself in the next step.' : `The bag stays tagged as ${STREAMS[expected].label[lang]}.`}</p>
+          </>
+        )}
+      </div>
+    )
+  }
   const match = result.stream === expected
   return (
     <div className={`rounded-2xl px-5 py-4 text-base ${match ? 'bg-sage' : 'bg-[#FEF5E6]'}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <span className="font-semibold text-ink flex items-center gap-2">
-          {result.source === 'gemini' ? <Sparkles size={18} className="text-forest" /> : <Cpu size={18} className="text-forest" />}
+          <Sparkles size={18} className="text-forest" />
           {match ? `Matches: ${STREAMS[result.stream].label[lang]}` : `AI suggests: ${STREAMS[result.stream].label[lang]}`}
         </span>
-        <span className="text-[15px] text-muted">{result.source === 'gemini' ? `Gemini Vision · ${result.ms} ms` : `On-device fallback · ${result.ms} ms`}</span>
+        <span className="text-[15px] text-muted">Gemini Vision · {(result.ms / 1000).toFixed(1)} s</span>
       </div>
       {result.note && <p className="text-muted mt-1">{result.note}</p>}
       {result.foods?.length > 0 && (
@@ -185,11 +207,7 @@ export function AIVerdict({ result, expected }) {
           <FoodList foods={result.foods} className="mt-2" />
         </div>
       )}
-      {result.fallbackReason && <p className="text-[15px] text-muted mt-1">{result.fallbackReason}, so the on-device check was used.</p>}
-      {result.liveStillRunning && (
-        <p className="text-[15px] text-forest mt-2 flex items-center gap-2"><RefreshCw size={15} className="animate-spin shrink-0" />{expected === 'food' ? 'Gemini is still identifying the food. Dishes will appear here in a few seconds.' : 'Gemini is still checking. The result will update in a few seconds.'}</p>
-      )}
-      {result.late && <p className="text-[15px] text-muted mt-1">Gemini answered after the {Math.round(geminiTimeout / 1000)} s limit, so this result replaced the on-device check.</p>}
+      {expected === 'food' && result.stream === 'food' && !result.foods?.length && <p className="text-muted mt-2">No dishes recognised. Add them in the next step.</p>}
     </div>
   )
 }

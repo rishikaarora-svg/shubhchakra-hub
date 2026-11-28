@@ -1,7 +1,5 @@
-// Gemini Vision waste classifier with a hard stage guardrail:
-// if the live call does not answer within TIMEOUT_MS (default 2 s) or the device is offline,
-// we finish an on-device analysis in 600 ms so a live demo never stalls.
-import { STREAMS } from './streams.js'
+// Gemini Vision waste classifier with a stage guardrail: if the live call hasn't answered within
+// TIMEOUT_MS (default 2 s) the coordinator can carry on, and the real result fills in when it arrives.
 
 const ENDPOINT = '/api/analyze-waste' // server function holds the Gemini key; nothing secret ships to the browser
 const TIMEOUT_MS = Number(import.meta.env.VITE_GEMINI_TIMEOUT_MS) || 2000
@@ -53,33 +51,27 @@ export async function analyzeWasteImageWithAI(base64Image, expectedStream, { onL
   }
 }
 
-// Deterministic-looking on-device fallback, finishes 600 ms after the guardrail fires.
-const LOCAL_ITEMS = {
-  food: [['Covered food container', [0.18, 0.12, 0.62, 0.55]], ['Sealed food tray', [0.3, 0.52, 0.78, 0.9]], ['Foil lid seal', [0.14, 0.16, 0.26, 0.5]]],
-  organic: [['Marigold floral scrap', [0.15, 0.1, 0.55, 0.48]], ['Fruit peel', [0.42, 0.5, 0.82, 0.88]], ['Vegetable trimmings', [0.6, 0.12, 0.9, 0.45]]],
-  dry: [['PET bottle', [0.12, 0.14, 0.7, 0.36]], ['Paper cup', [0.3, 0.45, 0.62, 0.66]], ['Cardboard sheet', [0.5, 0.6, 0.9, 0.92]]],
-  sanitary: [['Sealed sanitary pouch', [0.22, 0.2, 0.66, 0.6]], ['Yellow biohazard liner', [0.08, 0.08, 0.92, 0.92]]],
-}
-
-// The on-device check can verify the stream and container but cannot name dishes, so `foods` stays empty.
+/**
+ * Fallback when Gemini can't answer in time. It makes no claims it can't back up: no item boxes,
+ * no seal / contamination verdict, no dishes. The coordinator's own stream choice is kept.
+ */
 function localAnalysis(expectedStream, started, reason, liveStillRunning = false) {
-  const wait = 600
   return new Promise((resolve) =>
     setTimeout(() => resolve({
       source: 'local',
-      model: 'on-device heuristic',
       fallbackReason: reason,
       ms: Math.round(performance.now() - started),
       stream: expectedStream,
       matchesExpected: true,
-      sealIntact: true,
-      contamination: 'none',
-      confidence: 0.86 + Math.random() * 0.1,
-      note: `${STREAMS[expectedStream].label.en} stream verified, container hygiene OK`,
-      items: LOCAL_ITEMS[expectedStream].map(([label, box]) => ({ label, box })),
+      unverified: true,
+      sealIntact: null,
+      contamination: null,
+      confidence: null,
+      note: '',
+      items: [],
       foods: [],
       liveStillRunning,
-    }), wait),
+    }), 300),
   )
 }
 

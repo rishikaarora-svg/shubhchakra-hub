@@ -131,7 +131,7 @@ export default function FieldLead({ go }) {
             ) : (
               <div className="space-y-3">
                 <CaptureButton onCapture={onCapture} label={t('field.snap')} className="w-full" icon={Camera} />
-                <p className="text-muted text-center">The photo is checked by Gemini Vision. If it takes longer than {geminiTimeout / 1000} seconds, an on-device check is used instead.</p>
+                <p className="text-muted text-center">Gemini Vision checks the photo and names the food. If it takes longer than {geminiTimeout / 1000} seconds you can carry on, and the result fills in when it arrives.</p>
                 <button className="w-full text-muted underline underline-offset-4 min-h-11" onClick={() => setPhoto('skipped')}>{t('field.skipPhoto')}</button>
               </div>
             )}
