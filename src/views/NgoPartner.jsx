@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { BellRing, Camera, CheckCircle2, MessageCircle, Navigation, Truck, Undo2, UtensilsCrossed } from 'lucide-react'
 import { bagFromPayload, parseQrPayload, useStore } from '../lib/store.jsx'
 import { KG_PER_MEAL, PARTNERS, TRANSIT_MS } from '../lib/streams.js'
-import { Button, Card, CardTitle, Empty, FoodList, Note, PageHeader, SlaTimer, StatusPill, dietSummary, foodNames, timeStr, useNow } from '../components/ui.jsx'
+import { Button, Card, CardTitle, Empty, GroupedFoodList, Note, PageHeader, SlaTimer, StatusPill, dietSummary, foodNames, timeStr, useNow } from '../components/ui.jsx'
 import { CaptureButton } from '../components/Camera.jsx'
 import { QRScanner } from '../components/QR.jsx'
 
@@ -106,8 +106,8 @@ function IncomingCard({ bag, focused }) {
       </div>
 
       {bag.foods?.length > 0
-        ? <div className="mt-4"><p className="text-muted mb-2">Food in this bag{dietSummary(bag.foods) && ` · ${dietSummary(bag.foods)}`}</p><FoodList foods={bag.foods} /></div>
-        : <p className="text-muted mt-4">Dishes not recorded for this bag.</p>}
+        ? <div className="mt-4"><p className="font-semibold text-ink mb-2">Food in this bag: {bag.foods.length} item{bag.foods.length === 1 ? '' : 's'}{dietSummary(bag.foods) && <span className="font-normal text-muted"> · {dietSummary(bag.foods)}</span>}</p><GroupedFoodList foods={bag.foods} /></div>
+        : <p className="text-muted mt-4">Food items not recorded for this bag.</p>}
 
       <div className="mt-6">
         <div className="relative h-2.5 rounded-full bg-track">

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { BINS, CODE_TO_STREAM, EC_FINE_AVOIDED, FOOD_SLA_MS, KG_PER_MEAL, STREAMS, STREAM_KEYS, TRANSIT_MS, VARIANCE_LIMIT, VENUE, bagKg, targetsFor } from './streams.js'
+import { BINS, CODE_TO_STREAM, FOOD_CATEGORIES, EC_FINE_AVOIDED, FOOD_SLA_MS, KG_PER_MEAL, STREAMS, STREAM_KEYS, TRANSIT_MS, VARIANCE_LIMIT, VENUE, bagKg, targetsFor } from './streams.js'
 import { translate } from './i18n.js'
 
 /*
@@ -10,7 +10,7 @@ import { translate } from './i18n.js'
    food: in_transit/arrived + NGO reject or SLA breach → rerouted (in_transit to compost MRF)
 */
 
-const STORAGE_KEY = 'shubhchakra-hub-state-v4'
+const STORAGE_KEY = 'shubhchakra-hub-state-v5'
 const MIN = 60 * 1000
 
 export const nextBagId = (state, stream) => `${STREAMS[stream].code}-${state.seq[stream]}`
@@ -44,11 +44,11 @@ function seedState() {
     },
     // newest first; opening numbers: 225.3 / 240 kg diverted (93.9%), 150 meals, 201.6 kg CO2e
     bags: [
-      { ...seed('FR-1042', 'crate', 1, 15, 'tagged', 3), foods: [{ name: 'Paneer butter masala', type: 'veg' }, { name: 'Jeera rice', type: 'veg' }] },
+      { ...seed('FR-1042', 'crate', 1, 15, 'tagged', 3), foods: [{ name: 'Paneer butter masala', type: 'veg', category: 'cooked' }, { name: 'Jeera rice', type: 'veg', category: 'cooked' }] },
       seed('DR-3012', 'crate', 1, 15, 'in_transit', 6),
       seed('OR-2032', 'crate', 2, 30, 'verified', 40, 30.3),
-      { ...seed('FR-1041', 'drum', 1, 40, 'accepted', 55), foods: [{ name: 'Dal makhani', type: 'veg' }, { name: 'Butter naan', type: 'veg' }] },
-      { ...seed('FR-1039', 'drum', 1, 35, 'accepted', 70), foods: [{ name: 'Veg biryani', type: 'veg' }, { name: 'Mixed raita', type: 'veg' }, { name: 'Gulab jamun', type: 'veg' }] },
+      { ...seed('FR-1041', 'drum', 1, 40, 'accepted', 55), foods: [{ name: 'Dal makhani', type: 'veg', category: 'cooked' }, { name: 'Butter naan', type: 'veg', category: 'cooked' }] },
+      { ...seed('FR-1039', 'drum', 1, 35, 'accepted', 70), foods: [{ name: 'Veg biryani', type: 'veg', category: 'cooked' }, { name: 'Mixed raita', type: 'veg', category: 'cooked' }, { name: 'Gulab jamun', type: 'veg', category: 'sweet' }] },
       seed('SN-4005', 'crate', 1, 15, 'verified', 85, 14.7),
       seed('DR-3011', 'drum', 1, 40, 'verified', 95, 40.8),
       seed('OR-2031', 'bin', 1, 80, 'verified', 110, 79.2),
@@ -229,7 +229,7 @@ export function bagQrUrl(bag) {
   const role = bag.destination === 'ngo' ? 'ngo' : 'recycler'
   const p = new URLSearchParams({ role, bagId: bag.id, s: bag.stream, kg: String(bag.declaredKg), b: bag.bin, q: String(bag.qty) })
   // dishes travel in the QR so a phone that has never seen this bag still knows the food (V:/N:/U: = veg / non-veg / unknown)
-  if (bag.foods?.length) p.set('f', bag.foods.map((f) => `${f.type === 'veg' ? 'V' : f.type === 'non-veg' ? 'N' : 'U'}:${f.name}`).join('|'))
+  if (bag.foods?.length) p.set('f', bag.foods.map((f) => `${f.type === 'veg' ? 'V' : f.type === 'non-veg' ? 'N' : 'U'}:${f.category || 'other'}:${f.name}`).join('|'))
   return `${window.location.origin}${window.location.pathname}?${p}`
 }
 
@@ -242,7 +242,11 @@ export function parseQrPayload(text) {
     const u = new URL(raw)
     const p = u.searchParams
     const id = p.get('bagId')?.toUpperCase()
-    const foods = (p.get('f') || '').split('|').filter(Boolean).map((x) => ({ type: { V: 'veg', N: 'non-veg' }[x[0]] || 'unknown', name: x.slice(2) }))
+    const foods = (p.get('f') || '').split('|').filter(Boolean).map((x) => {
+      const [t, ...rest] = x.split(':')
+      const hasCat = rest.length > 1 && FOOD_CATEGORIES.some((c) => c.key === rest[0])
+      return { type: { V: 'veg', N: 'non-veg' }[t] || 'unknown', category: hasCat ? rest[0] : 'other', name: (hasCat ? rest.slice(1) : rest).join(':'), rescuable: true }
+    })
     if (id && ID_RE.test(id)) return { id, stream: p.get('s'), kg: Number(p.get('kg')) || null, bin: p.get('b'), qty: Number(p.get('q')) || 1, role: p.get('role'), foods }
   } catch { /* not a URL */ }
   const m = raw.toUpperCase().match(ID_RE)

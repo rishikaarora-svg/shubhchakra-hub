@@ -4,7 +4,7 @@ import { downscale, fileToDataUrl } from '../lib/image.js'
 import { warmUpAI } from '../lib/gemini.js'
 import { STREAMS } from '../lib/streams.js'
 import { useStore } from '../lib/store.jsx'
-import { Button, FoodList, dietSummary } from './ui.jsx'
+import { Button, FoodList, GroupedFoodList, dietSummary } from './ui.jsx'
 
 const canUseLiveCamera = () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && window.isSecureContext
 
@@ -179,18 +179,20 @@ export function AIVerdict({ result, expected }) {
         {result.liveStillRunning ? (
           <>
             <p className="font-semibold text-ink flex items-center gap-2"><RefreshCw size={18} className="animate-spin shrink-0 text-forest" />Gemini is still checking this photo</p>
-            <p className="text-muted mt-1">{expected === 'food' ? 'You can continue. The dishes will fill in automatically in a few seconds.' : 'You can continue. The result will fill in automatically in a few seconds.'}</p>
+            <p className="text-muted mt-1">{expected === 'food' ? 'You can continue. The food items will fill in automatically in a few seconds.' : 'You can continue. The result will fill in automatically in a few seconds.'}</p>
           </>
         ) : (
           <>
             <p className="font-semibold text-ink flex items-center gap-2"><Cpu size={18} className="shrink-0 text-[#B45309]" />Couldn’t check this photo with AI</p>
-            <p className="text-muted mt-1">{result.fallbackReason}. {expected === 'food' ? 'Add the dishes yourself in the next step.' : `The bag stays tagged as ${STREAMS[expected].label[lang]}.`}</p>
+            <p className="text-muted mt-1">{result.fallbackReason}. {expected === 'food' ? 'Add the food items yourself in the next step.' : `The bag stays tagged as ${STREAMS[expected].label[lang]}.`}</p>
           </>
         )}
       </div>
     )
   }
   const match = result.stream === expected
+  const rescuable = (result.foods || []).filter((f) => f.rescuable !== false)
+  const compost = (result.foods || []).filter((f) => f.rescuable === false)
   return (
     <div className={`rounded-2xl px-5 py-4 text-base ${match ? 'bg-sage' : 'bg-[#FEF5E6]'}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -201,13 +203,20 @@ export function AIVerdict({ result, expected }) {
         <span className="text-[15px] text-muted">Gemini Vision · {(result.ms / 1000).toFixed(1)} s</span>
       </div>
       {result.note && <p className="text-muted mt-1">{result.note}</p>}
-      {result.foods?.length > 0 && (
-        <div className="mt-3">
-          <p className="font-semibold text-ink">Food identified{dietSummary(result.foods) && <span className="font-normal text-muted"> · {dietSummary(result.foods)}</span>}</p>
-          <FoodList foods={result.foods} className="mt-2" />
+      {rescuable.length > 0 && (
+        <div className="mt-4">
+          <p className="font-semibold text-ink">Food identified: {rescuable.length} item{rescuable.length === 1 ? '' : 's'}{dietSummary(rescuable) && <span className="font-normal text-muted"> · {dietSummary(rescuable)}</span>}</p>
+          <GroupedFoodList foods={rescuable} className="mt-2" />
         </div>
       )}
-      {expected === 'food' && result.stream === 'food' && !result.foods?.length && <p className="text-muted mt-2">No dishes recognised. Add them in the next step.</p>}
+      {compost.length > 0 && (
+        <div className="mt-4 rounded-xl bg-white/70 px-4 py-3">
+          <p className="font-semibold text-ink">For compost, not rescue</p>
+          <p className="text-[15px] text-muted mb-2">Peels, seeds, scraps or half-eaten food. Keep these out of the rescue bag.</p>
+          <FoodList foods={compost} />
+        </div>
+      )}
+      {expected === 'food' && result.stream === 'food' && !result.foods?.length && <p className="text-muted mt-2">No food items recognised. Add them in the next step.</p>}
     </div>
   )
 }

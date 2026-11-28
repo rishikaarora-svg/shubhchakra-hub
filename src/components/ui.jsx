@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { STREAMS } from '../lib/streams.js'
+import { FOOD_CATEGORIES, STREAMS } from '../lib/streams.js'
 import { useStore } from '../lib/store.jsx'
 
 export function Card({ className = '', children, ...rest }) {
@@ -221,3 +221,25 @@ export function dietSummary(foods = []) {
 }
 
 export const foodNames = (foods = []) => foods.map((f) => f.name).join(', ')
+
+/** Food items grouped by category ("Fruits: Banana, Papaya…"). */
+export function GroupedFoodList({ foods, onRemove, onToggle, className = '' }) {
+  if (!foods?.length) return null
+  const indexed = foods.map((f, i) => ({ ...f, _i: i }))
+  return (
+    <div className={`space-y-3 ${className}`}>
+      {FOOD_CATEGORIES.map((c) => {
+        const group = indexed.filter((f) => (f.category || 'other') === c.key)
+        if (!group.length) return null
+        return (
+          <div key={c.key}>
+            <p className="text-[15px] text-muted mb-1.5">{c.label} <span className="text-[#A8A29E]">· {group.length}</span></p>
+            <FoodList foods={group}
+              onRemove={onRemove && ((i) => onRemove(group[i]._i))}
+              onToggle={onToggle && ((i, type) => onToggle(group[i]._i, type))} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}

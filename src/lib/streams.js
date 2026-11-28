@@ -31,6 +31,17 @@ export const BINS = [
 ]
 
 export const KG_PER_MEAL = 0.5
+
+// How identified food items are grouped (matches the categories the AI returns)
+export const FOOD_CATEGORIES = [
+  { key: 'cooked', label: 'Cooked dishes' },
+  { key: 'fruit', label: 'Fruits' },
+  { key: 'dry-fruit', label: 'Dry fruits & nuts' },
+  { key: 'sweet', label: 'Sweets & desserts' },
+  { key: 'bakery', label: 'Bakery & snacks' },
+  { key: 'vegetable', label: 'Raw vegetables' },
+  { key: 'other', label: 'Other' },
+]
 export const EC_FINE_AVOIDED = 25000 // ₹ per compliant event
 export const FOOD_SLA_MS = 2 * 60 * 60 * 1000 // FSSAI 2-hour rescue window
 export const TRANSIT_MS = 20 * 60 * 1000 // modelled drive time venue → partner

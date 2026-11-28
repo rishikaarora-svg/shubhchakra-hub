@@ -3,8 +3,8 @@ import { ArrowLeft, ArrowRight, Camera, ClipboardCheck, MapPin, Minus, Plus, Pri
 import { nextBagId, useStore } from '../lib/store.jsx'
 import { analyzeWasteImageWithAI, geminiTimeout, warmUpAI } from '../lib/gemini.js'
 import { thumbnail } from '../lib/image.js'
-import { BINS, STREAMS, STREAM_KEYS, destinationFor } from '../lib/streams.js'
-import { Button, Card, CardTitle, DietMark, FoodList, Note, PageHeader, StatusPill, StreamBadge, Toggle } from '../components/ui.jsx'
+import { BINS, FOOD_CATEGORIES, STREAMS, STREAM_KEYS, destinationFor } from '../lib/streams.js'
+import { Button, Card, CardTitle, DietMark, GroupedFoodList, Note, PageHeader, StatusPill, StreamBadge, Toggle } from '../components/ui.jsx'
 import { AIPhoto, AIVerdict, CaptureButton } from '../components/Camera.jsx'
 import { QRTag } from '../components/QR.jsx'
 
@@ -25,6 +25,7 @@ export default function FieldLead({ go }) {
   const [bagId, setBagId] = useState(null)
   const [gps, setGps] = useState(null)
   const [foods, setFoods] = useState([])
+  const [compostItems, setCompostItems] = useState([])
   const shotRef = useRef(0)
 
   const bag = state.bags.find((b) => b.id === bagId)
@@ -50,7 +51,12 @@ export default function FieldLead({ go }) {
     setPhoto(dataUrl); setAi(null); setAnalyzing(true)
     navigator.geolocation?.getCurrentPosition((p) => setGps({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 3000, maximumAge: 60000 })
     const shot = ++shotRef.current
-    const applyFoods = (list) => { if (list?.length) setFoods((cur) => [...cur, ...list.filter((f) => !cur.some((c) => c.name.toLowerCase() === f.name.toLowerCase()))]) }
+    const merge = (cur, list) => [...cur, ...list.filter((f) => !cur.some((c) => c.name.toLowerCase() === f.name.toLowerCase()))]
+    // Rescuable items go into the bag; peels, seeds and scraps are listed separately for compost.
+    const applyFoods = (list = []) => {
+      setFoods((cur) => merge(cur, list.filter((f) => f.rescuable !== false)))
+      setCompostItems((cur) => merge(cur, list.filter((f) => f.rescuable === false)))
+    }
     const r = await analyzeWasteImageWithAI(dataUrl, stream, {
       // Gemini answered after the guardrail: swap in the real result and its dishes (if this is still the current photo)
       onLateResult: (late) => { if (shotRef.current === shot) { setAi(late); applyFoods(late.foods) } },
@@ -60,7 +66,7 @@ export default function FieldLead({ go }) {
     applyFoods(r.foods)
   }
 
-  const reset = () => { shotRef.current++; setStep(1); setPhoto(null); setAi(null); setBin(null); setQty(1); setSafety([false, false, false, false]); setBagId(null); setGps(null); setFoods([]) }
+  const reset = () => { shotRef.current++; setStep(1); setPhoto(null); setAi(null); setBin(null); setQty(1); setSafety([false, false, false, false]); setBagId(null); setGps(null); setFoods([]); setCompostItems([]) }
 
   const createBag = async () => {
     const binDef = BINS.find((b) => b.key === bin)
@@ -177,6 +183,9 @@ export default function FieldLead({ go }) {
               <div>
                 <CardTitle title={t('field.foods')} subtitle={t('field.foodsHint')} className="mb-4" />
                 <FoodEditor foods={foods} onChange={setFoods} />
+                {compostItems.length > 0 && (
+                  <Note tone="amber" className="mt-3">Keep out of this bag and put in the green compost bin: <b>{compostItems.map((f) => f.name).join(', ')}</b> (peels, seeds or scraps).</Note>
+                )}
               </div>
             )}
 
@@ -236,29 +245,34 @@ export default function FieldLead({ go }) {
   )
 }
 
-/** Add / remove the dishes in a food rescue bag (pre-filled from the AI photo check). */
+/** Add / remove the food items in a rescue bag (pre-filled from the AI photo check), grouped by category. */
 function FoodEditor({ foods, onChange }) {
   const [name, setName] = useState('')
   const [type, setType] = useState('veg')
+  const [category, setCategory] = useState('cooked')
   const add = (e) => {
     e.preventDefault()
     const n = name.trim()
     if (!n || foods.some((f) => f.name.toLowerCase() === n.toLowerCase())) return
-    onChange([...foods, { name: n.charAt(0).toUpperCase() + n.slice(1), type }])
+    onChange([...foods, { name: n.charAt(0).toUpperCase() + n.slice(1), type, category, rescuable: true }])
     setName('')
   }
   return (
     <div className="space-y-3">
       {foods.length ? (
         <>
-          <FoodList foods={foods} onRemove={(i) => onChange(foods.filter((_, j) => j !== i))} onToggle={(i, type) => onChange(foods.map((f, j) => (j === i ? { ...f, type } : f)))} />
+          <GroupedFoodList foods={foods} onRemove={(i) => onChange(foods.filter((_, j) => j !== i))} onToggle={(i, type) => onChange(foods.map((f, j) => (j === i ? { ...f, type } : f)))} />
           {foods.some((f) => f.type === 'unknown') && <Note tone="amber">Tap the <b>?</b> to mark {foods.filter((f) => f.type === 'unknown').map((f) => f.name).join(', ')} as veg or non-veg.</Note>}
-          <p className="text-[15px] text-muted">Check the names and veg / non-veg marks before dispatch. The AI can confuse similar-looking dishes, like paneer and chicken curries. Tap a mark to change it.</p>
+          <p className="text-[15px] text-muted">Check the items and veg / non-veg marks before dispatch. The AI can confuse similar-looking food, like paneer and chicken curries. Tap a mark to change it.</p>
         </>
-      ) : <Note tone="amber">Add at least one dish. The NGO needs to know what food is coming.</Note>}
+      ) : <Note tone="amber">Add at least one food item. The NGO needs to know what food is coming.</Note>}
       <form onSubmit={add} className="flex flex-wrap gap-2">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add a dish, e.g. Dal makhani" aria-label="Dish name"
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add an item, e.g. Almonds" aria-label="Food item name"
           className="flex-1 min-w-48 min-h-12 px-4 rounded-2xl border border-line bg-white text-base focus:outline-2 focus:outline-mint" />
+        <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Food category"
+          className="min-h-12 px-3 rounded-2xl border border-line bg-white text-[15px] focus:outline-2 focus:outline-mint">
+          {FOOD_CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
         <div className="flex rounded-2xl border border-line overflow-hidden" role="group" aria-label="Veg or non-veg">
           {[['veg', 'Veg'], ['non-veg', 'Non-veg']].map(([k, l]) => (
             <button key={k} type="button" aria-pressed={type === k} onClick={() => setType(k)}
