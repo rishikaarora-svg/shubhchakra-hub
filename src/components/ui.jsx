@@ -177,3 +177,47 @@ export function Empty({ icon: Icon, children }) {
 }
 
 export const timeStr = (ms) => new Date(ms).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+
+/** Indian food-label mark: green dot in a square for veg, brown triangle for non-veg. */
+export function DietMark({ type }) {
+  if (type !== 'veg' && type !== 'non-veg') return null
+  const c = type === 'veg' ? '#15803D' : '#9A3412'
+  return (
+    <span role="img" aria-label={type === 'veg' ? 'Vegetarian' : 'Non-vegetarian'} title={type === 'veg' ? 'Vegetarian' : 'Non-vegetarian'}
+      className="inline-grid place-items-center size-4 border-2 rounded-[3px] shrink-0 bg-white" style={{ borderColor: c }}>
+      {type === 'veg'
+        ? <span className="size-2 rounded-full" style={{ background: c }} />
+        : <span style={{ width: 0, height: 0, borderLeft: '4px solid transparent', borderRight: '4px solid transparent', borderBottom: `7px solid ${c}` }} />}
+    </span>
+  )
+}
+
+const NEXT_TYPE = { veg: 'non-veg', 'non-veg': 'veg', unknown: 'veg' }
+
+export function FoodList({ foods, className = '', onRemove, onToggle }) {
+  if (!foods?.length) return null
+  return (
+    <ul className={`flex flex-wrap gap-2 ${className}`}>
+      {foods.map((f, i) => (
+        <li key={`${f.name}-${i}`} className={`inline-flex items-center gap-2 rounded-full border bg-white pl-3 pr-3 py-1 text-[15px] font-medium text-ink ${f.type === 'unknown' && onToggle ? 'border-[#F5C77E]' : 'border-line'}`}>
+          {onToggle ? (
+            <button type="button" onClick={() => onToggle(i, NEXT_TYPE[f.type] || 'veg')} className="grid place-items-center -ml-1 size-7 rounded-full hover:bg-[#EEEBE5]"
+              aria-label={`${f.name}: ${f.type === 'unknown' ? 'veg or non-veg not set' : f.type}. Tap to change`}>
+              {f.type === 'unknown' ? <span className="grid place-items-center size-4 border-2 border-[#B45309] rounded-[3px] text-[10px] font-bold text-[#B45309]">?</span> : <DietMark type={f.type} />}
+            </button>
+          ) : <DietMark type={f.type} />}
+          {f.name}
+          {onRemove && <button type="button" onClick={() => onRemove(i)} className="-mr-1 grid place-items-center size-6 rounded-full text-muted hover:bg-[#EEEBE5]" aria-label={`Remove ${f.name}`}>×</button>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function dietSummary(foods = []) {
+  const types = new Set(foods.map((f) => f.type))
+  if (types.has('non-veg')) return types.has('veg') ? 'Veg & non-veg' : 'Non-veg'
+  return types.has('veg') ? 'Veg' : ''
+}
+
+export const foodNames = (foods = []) => foods.map((f) => f.name).join(', ')

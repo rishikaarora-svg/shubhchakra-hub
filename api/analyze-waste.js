@@ -1,7 +1,7 @@
 // Vercel Function: POST /api/analyze-waste  { image: <base64 JPEG>, expectedStream }
 import { handleAnalyzeRequest } from '../server/analyze-waste.js'
 
-export const config = { maxDuration: 10 }
+export const config = { maxDuration: 15 }
 
 export async function POST(request) {
   let body = null

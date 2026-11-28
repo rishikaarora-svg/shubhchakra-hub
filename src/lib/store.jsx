@@ -10,7 +10,7 @@ import { translate } from './i18n.js'
    food: in_transit/arrived + NGO reject or SLA breach → rerouted (in_transit to compost MRF)
 */
 
-const STORAGE_KEY = 'shubhchakra-hub-state-v3'
+const STORAGE_KEY = 'shubhchakra-hub-state-v4'
 const MIN = 60 * 1000
 
 export const nextBagId = (state, stream) => `${STREAMS[stream].code}-${state.seq[stream]}`
@@ -44,11 +44,11 @@ function seedState() {
     },
     // newest first; opening numbers: 225.3 / 240 kg diverted (93.9%), 150 meals, 201.6 kg CO2e
     bags: [
-      seed('FR-1042', 'crate', 1, 15, 'tagged', 3),
+      { ...seed('FR-1042', 'crate', 1, 15, 'tagged', 3), foods: [{ name: 'Paneer butter masala', type: 'veg' }, { name: 'Jeera rice', type: 'veg' }] },
       seed('DR-3012', 'crate', 1, 15, 'in_transit', 6),
       seed('OR-2032', 'crate', 2, 30, 'verified', 40, 30.3),
-      seed('FR-1041', 'drum', 1, 40, 'accepted', 55),
-      seed('FR-1039', 'drum', 1, 35, 'accepted', 70),
+      { ...seed('FR-1041', 'drum', 1, 40, 'accepted', 55), foods: [{ name: 'Dal makhani', type: 'veg' }, { name: 'Butter naan', type: 'veg' }] },
+      { ...seed('FR-1039', 'drum', 1, 35, 'accepted', 70), foods: [{ name: 'Veg biryani', type: 'veg' }, { name: 'Mixed raita', type: 'veg' }, { name: 'Gulab jamun', type: 'veg' }] },
       seed('SN-4005', 'crate', 1, 15, 'verified', 85, 14.7),
       seed('DR-3011', 'drum', 1, 40, 'verified', 95, 40.8),
       seed('OR-2031', 'bin', 1, 80, 'verified', 110, 79.2),
@@ -228,6 +228,8 @@ export const useStore = () => useContext(Ctx)
 export function bagQrUrl(bag) {
   const role = bag.destination === 'ngo' ? 'ngo' : 'recycler'
   const p = new URLSearchParams({ role, bagId: bag.id, s: bag.stream, kg: String(bag.declaredKg), b: bag.bin, q: String(bag.qty) })
+  // dishes travel in the QR so a phone that has never seen this bag still knows the food (V:/N:/U: = veg / non-veg / unknown)
+  if (bag.foods?.length) p.set('f', bag.foods.map((f) => `${f.type === 'veg' ? 'V' : f.type === 'non-veg' ? 'N' : 'U'}:${f.name}`).join('|'))
   return `${window.location.origin}${window.location.pathname}?${p}`
 }
 
@@ -240,7 +242,8 @@ export function parseQrPayload(text) {
     const u = new URL(raw)
     const p = u.searchParams
     const id = p.get('bagId')?.toUpperCase()
-    if (id && ID_RE.test(id)) return { id, stream: p.get('s'), kg: Number(p.get('kg')) || null, bin: p.get('b'), qty: Number(p.get('q')) || 1, role: p.get('role') }
+    const foods = (p.get('f') || '').split('|').filter(Boolean).map((x) => ({ type: { V: 'veg', N: 'non-veg' }[x[0]] || 'unknown', name: x.slice(2) }))
+    if (id && ID_RE.test(id)) return { id, stream: p.get('s'), kg: Number(p.get('kg')) || null, bin: p.get('b'), qty: Number(p.get('q')) || 1, role: p.get('role'), foods }
   } catch { /* not a URL */ }
   const m = raw.toUpperCase().match(ID_RE)
   return m ? { id: m[0] } : null
@@ -250,7 +253,7 @@ export function bagFromPayload(p, at) {
   const stream = STREAMS[p.stream] ? p.stream : CODE_TO_STREAM[p.id.slice(0, 2)] || 'dry'
   const declaredKg = p.kg || BINS.find((b) => b.key === p.bin)?.kg || 40
   return {
-    id: p.id, stream, bin: p.bin || 'drum', qty: p.qty || 1, declaredKg,
+    id: p.id, stream, bin: p.bin || 'drum', qty: p.qty || 1, declaredKg, foods: p.foods || [],
     destination: p.role === 'ngo' || (stream === 'food' && p.role !== 'recycler') ? 'ngo' : 'recycler',
     status: 'arrived', createdAt: at, dispatchedAt: at, arrivedAt: at,
     slaDeadline: stream === 'food' ? at + FOOD_SLA_MS : null,

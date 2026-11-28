@@ -144,6 +144,7 @@ export default function ControlTower({ go }) {
                     <span className="size-2.5 rounded-full shrink-0" style={{ background: STREAMS[b.stream].color }} />
                     {STREAMS[b.stream].label[lang].split(' ')[0]}{b.rerouted ? ' → compost' : ''} · <span className="tabular-nums">{bagKg(b)} kg</span>
                   </span>
+                  {b.foods?.length > 0 && <span className="block text-[14px] text-muted max-w-48 truncate" title={b.foods.map((f) => f.name).join(', ')}>{b.foods.map((f) => f.name).join(', ')}</span>}
                 </td>
                 <td className="min-w-32">{destinationFor(b).name}</td>
                 <td><StatusPill status={b.status} /></td>

@@ -26,6 +26,7 @@ export function QRTag({ bag, size = 200 }) {
         <div className="text-center">
           <div className="font-bold text-2xl text-ink tracking-wide">{bag.id}</div>
           <div className="text-base text-muted">→ {destinationFor(bag).name}</div>
+          {bag.foods?.length > 0 && <div className="text-[15px] text-ink mt-1">{bag.foods.map((f) => f.name).join(', ')}</div>}
         </div>
       </div>
     </div>

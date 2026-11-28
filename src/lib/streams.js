@@ -31,7 +31,6 @@ export const BINS = [
 ]
 
 export const KG_PER_MEAL = 0.5
-export const CERT_VALIDITY_MONTHS = 6
 export const EC_FINE_AVOIDED = 25000 // ₹ per compliant event
 export const FOOD_SLA_MS = 2 * 60 * 60 * 1000 // FSSAI 2-hour rescue window
 export const TRANSIT_MS = 20 * 60 * 1000 // modelled drive time venue → partner

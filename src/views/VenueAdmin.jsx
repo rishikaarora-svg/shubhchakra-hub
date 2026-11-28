@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Award, ClipboardCheck, FileJson, FileSpreadsheet, FileText, Printer } from 'lucide-react'
 import { useStore } from '../lib/store.jsx'
-import { CERT_VALIDITY_MONTHS, MENUS, STREAMS, STREAM_KEYS, VENUE, destinationFor, fmtINR, fmtKg } from '../lib/streams.js'
+import { MENUS, STREAMS, STREAM_KEYS, VENUE, destinationFor, fmtINR, fmtKg } from '../lib/streams.js'
 import { AnimatedNumber, Button, Card, CardTitle, KeyValue, Note, PageHeader, Stat } from '../components/ui.jsx'
 import Modal from '../components/Modal.jsx'
 
@@ -16,7 +16,6 @@ function Field({ label, children }) {
   )
 }
 
-const addMonths = (ms, months) => { const d = new Date(ms); d.setMonth(d.getMonth() + months); return d }
 const menuLabel = (key) => MENUS.find((x) => x.key === key)?.label || key
 
 export default function VenueAdmin() {
@@ -133,11 +132,11 @@ function buildReturn(state, m) {
     totals: { divertedKg: Number(m.diverted.toFixed(1)), baselineKg: Number(m.base.toFixed(1)), diversionPct: Number(m.pct.toFixed(1)), foodRescuedKg: m.rescuedFood, mealsRescued: m.meals, co2eSavedKg: m.co2, ecPenaltyAvoidedINR: m.ecAvoided },
     streams: Object.fromEntries(STREAM_KEYS.map((k) => [STREAMS[k].label.en, { kg: Number(m.byStream[k].toFixed(1)) }])),
     custodyChain: state.bags.map((b) => ({
-      bagId: b.id, stream: STREAMS[b.stream].label.en, rerouted: Boolean(b.rerouted), declaredKg: b.declaredKg, facilityKg: b.facilityKg ?? null,
+      bagId: b.id, stream: STREAMS[b.stream].label.en, foods: (b.foods || []).map((f) => `${f.name} (${f.type})`), rerouted: Boolean(b.rerouted), declaredKg: b.declaredKg, facilityKg: b.facilityKg ?? null,
       variancePct: b.variance != null ? Number((b.variance * 100).toFixed(2)) : null, status: b.status, handler: destinationFor(b).name,
       events: b.history.map((h) => ({ at: new Date(h.at).toISOString(), event: h.msg })),
     })),
-    validity: { months: CERT_VALIDITY_MONTHS, issuedOn: new Date(state.event.registeredAt || Date.now()).toISOString().slice(0, 10), validUntil: addMonths(state.event.registeredAt || Date.now(), CERT_VALIDITY_MONTHS).toISOString().slice(0, 10) },
+    issuedOn: new Date(state.event.registeredAt || Date.now()).toISOString().slice(0, 10),
   }
 }
 
@@ -167,14 +166,12 @@ function CertificatePackage() {
               <h3 className="text-2xl font-bold text-forest mt-1">EBWGR compliance & CPCB return</h3>
               <p className="text-muted mt-1">Solid Waste Management Rules 2026 · FSSAI surplus food recovery</p>
             </div>
-            <span className="shrink-0 text-center rounded-2xl bg-forest text-white px-4 py-3"><span className="block text-3xl font-bold leading-none">{CERT_VALIDITY_MONTHS}</span><span className="text-sm font-medium">month validity</span></span>
           </div>
           <div className="grid sm:grid-cols-2 gap-x-8 py-2">
             <KeyValue k="CPCB reference" v={<span className="font-mono">{ref}</span>} />
-            <KeyValue k="Valid until" v={ret.validity.validUntil} />
             <KeyValue k="Generator" v={state.event.venue} />
             <KeyValue k="Event" v={`${state.event.name}, ${state.event.guests} guests`} />
-            <KeyValue k="Issued on" v={ret.validity.issuedOn} />
+            <KeyValue k="Issued on" v={ret.issuedOn} />
             <KeyValue k="Menu & timing" v={`${menuLabel(state.event.menu)}, ${state.event.start}–${state.event.end}`} />
           </div>
           <table className="w-full text-base my-5">

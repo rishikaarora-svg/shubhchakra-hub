@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { BellRing, Camera, CheckCircle2, MessageCircle, Navigation, Truck, Undo2, UtensilsCrossed } from 'lucide-react'
 import { bagFromPayload, parseQrPayload, useStore } from '../lib/store.jsx'
 import { KG_PER_MEAL, PARTNERS, TRANSIT_MS } from '../lib/streams.js'
-import { Button, Card, CardTitle, Empty, Note, PageHeader, SlaTimer, StatusPill, timeStr, useNow } from '../components/ui.jsx'
+import { Button, Card, CardTitle, Empty, FoodList, Note, PageHeader, SlaTimer, StatusPill, dietSummary, foodNames, timeStr, useNow } from '../components/ui.jsx'
 import { CaptureButton } from '../components/Camera.jsx'
 import { QRScanner } from '../components/QR.jsx'
 
@@ -77,7 +77,7 @@ export default function NgoPartner({ params }) {
             {done.map((b) => (
               <li key={b.id} className="py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-line last:border-0">
                 <span className="font-semibold">{b.id}</span>
-                <span className="text-muted flex-1 min-w-40">{b.rerouted ? `Sent to compost: ${b.rerouteReason}` : `${b.declaredKg} kg, about ${Math.round(b.declaredKg / KG_PER_MEAL)} meals`}</span>
+                <span className="text-muted flex-1 min-w-40">{b.rerouted ? `Sent to compost: ${b.rerouteReason}` : `${b.foods?.length ? `${foodNames(b.foods)} · ` : ''}${b.declaredKg} kg, about ${Math.round(b.declaredKg / KG_PER_MEAL)} meals`}</span>
                 <StatusPill status={b.status} />
               </li>
             ))}
@@ -104,6 +104,10 @@ function IncomingCard({ bag, focused }) {
         </div>
         {bag.slaDeadline ? <SlaTimer deadline={bag.slaDeadline} /> : <StatusPill status={bag.status} />}
       </div>
+
+      {bag.foods?.length > 0
+        ? <div className="mt-4"><p className="text-muted mb-2">Food in this bag{dietSummary(bag.foods) && ` · ${dietSummary(bag.foods)}`}</p><FoodList foods={bag.foods} /></div>
+        : <p className="text-muted mt-4">Dishes not recorded for this bag.</p>}
 
       <div className="mt-6">
         <div className="relative h-2.5 rounded-full bg-track">
@@ -136,7 +140,7 @@ function WhatsAppReceipt({ bag }) {
   const meals = Math.round(bag.declaredKg / KG_PER_MEAL)
   const text = bag.rerouted
     ? `ShubhChakra Hub ♻️\nBatch ${bag.id} (${bag.declaredKg} kg) was sent to ${PARTNERS.compost.name} for composting.\nReason: ${bag.rerouteReason}.\nCompliance record intact.`
-    : `ShubhChakra Hub ✅ Handover proof\nBag: ${bag.id}\nFrom: ${state.event.venue}\nTo: ${PARTNERS.ngo.name}\nQuantity: ${bag.declaredKg} kg (about ${meals} meals)\nTime: ${bag.closedAt ? new Date(bag.closedAt).toLocaleString('en-IN') : ''}\nFood safety check: passed\nResponsibility closed under SWM Rules 2026.`
+    : `ShubhChakra Hub ✅ Handover proof\nBag: ${bag.id}\nFrom: ${state.event.venue}\nTo: ${PARTNERS.ngo.name}\n${bag.foods?.length ? `Food: ${foodNames(bag.foods)}${dietSummary(bag.foods) ? ` (${dietSummary(bag.foods).toLowerCase()})` : ''}\n` : ''}Quantity: ${bag.declaredKg} kg (about ${meals} meals)\nTime: ${bag.closedAt ? new Date(bag.closedAt).toLocaleString('en-IN') : ''}\nFood safety check: passed\nResponsibility closed under SWM Rules 2026.`
   return (
     <Card className="!p-0 overflow-hidden">
       <div className="bg-[#075E54] text-white px-6 py-4 flex items-center gap-2.5"><MessageCircle size={20} /><span className="text-lg font-semibold">{t('ngo.receipt')}</span></div>

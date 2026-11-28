@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Cpu, ImageUp, RefreshCw, ScanEye, Sparkles, SwitchCamera, X } from 'lucide-react'
 import { downscale, fileToDataUrl } from '../lib/image.js'
-import { warmUpAI } from '../lib/gemini.js'
+import { geminiTimeout, warmUpAI } from '../lib/gemini.js'
 import { STREAMS } from '../lib/streams.js'
 import { useStore } from '../lib/store.jsx'
-import { Button } from './ui.jsx'
+import { Button, FoodList, dietSummary } from './ui.jsx'
 
 const canUseLiveCamera = () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia) && window.isSecureContext
 
@@ -179,7 +179,17 @@ export function AIVerdict({ result, expected }) {
         <span className="text-[15px] text-muted">{result.source === 'gemini' ? `Gemini Vision · ${result.ms} ms` : `On-device fallback · ${result.ms} ms`}</span>
       </div>
       {result.note && <p className="text-muted mt-1">{result.note}</p>}
+      {result.foods?.length > 0 && (
+        <div className="mt-3">
+          <p className="font-semibold text-ink">Food identified{dietSummary(result.foods) && <span className="font-normal text-muted"> · {dietSummary(result.foods)}</span>}</p>
+          <FoodList foods={result.foods} className="mt-2" />
+        </div>
+      )}
       {result.fallbackReason && <p className="text-[15px] text-muted mt-1">{result.fallbackReason}, so the on-device check was used.</p>}
+      {result.liveStillRunning && (
+        <p className="text-[15px] text-forest mt-2 flex items-center gap-2"><RefreshCw size={15} className="animate-spin shrink-0" />{expected === 'food' ? 'Gemini is still identifying the food. Dishes will appear here in a few seconds.' : 'Gemini is still checking. The result will update in a few seconds.'}</p>
+      )}
+      {result.late && <p className="text-[15px] text-muted mt-1">Gemini answered after the {Math.round(geminiTimeout / 1000)} s limit, so this result replaced the on-device check.</p>}
     </div>
   )
 }

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Camera, ClipboardCheck, MapPin, Minus, Plus, Printer, QrCode, RotateCcw, Send, Truck } from 'lucide-react'
 import { nextBagId, useStore } from '../lib/store.jsx'
 import { analyzeWasteImageWithAI, geminiTimeout, warmUpAI } from '../lib/gemini.js'
 import { thumbnail } from '../lib/image.js'
 import { BINS, STREAMS, STREAM_KEYS, destinationFor } from '../lib/streams.js'
-import { Button, Card, CardTitle, Note, PageHeader, StatusPill, StreamBadge, Toggle } from '../components/ui.jsx'
+import { Button, Card, CardTitle, DietMark, FoodList, Note, PageHeader, StatusPill, StreamBadge, Toggle } from '../components/ui.jsx'
 import { AIPhoto, AIVerdict, CaptureButton } from '../components/Camera.jsx'
 import { QRTag } from '../components/QR.jsx'
 
@@ -24,6 +24,8 @@ export default function FieldLead({ go }) {
   const [safety, setSafety] = useState([false, false, false, false])
   const [bagId, setBagId] = useState(null)
   const [gps, setGps] = useState(null)
+  const [foods, setFoods] = useState([])
+  const shotRef = useRef(0)
 
   const bag = state.bags.find((b) => b.id === bagId)
 
@@ -47,11 +49,18 @@ export default function FieldLead({ go }) {
   const onCapture = async (dataUrl) => {
     setPhoto(dataUrl); setAi(null); setAnalyzing(true)
     navigator.geolocation?.getCurrentPosition((p) => setGps({ lat: p.coords.latitude, lng: p.coords.longitude }), () => {}, { timeout: 3000, maximumAge: 60000 })
-    const r = await analyzeWasteImageWithAI(dataUrl, stream)
+    const shot = ++shotRef.current
+    const applyFoods = (list) => { if (list?.length) setFoods((cur) => [...cur, ...list.filter((f) => !cur.some((c) => c.name.toLowerCase() === f.name.toLowerCase()))]) }
+    const r = await analyzeWasteImageWithAI(dataUrl, stream, {
+      // Gemini answered after the guardrail: swap in the real result and its dishes (if this is still the current photo)
+      onLateResult: (late) => { if (shotRef.current === shot) { setAi(late); applyFoods(late.foods) } },
+    })
+    if (shotRef.current !== shot) return
     setAi(r); setAnalyzing(false)
+    applyFoods(r.foods)
   }
 
-  const reset = () => { setStep(1); setPhoto(null); setAi(null); setBin(null); setQty(1); setSafety([false, false, false, false]); setBagId(null); setGps(null) }
+  const reset = () => { shotRef.current++; setStep(1); setPhoto(null); setAi(null); setBin(null); setQty(1); setSafety([false, false, false, false]); setBagId(null); setGps(null); setFoods([]) }
 
   const createBag = async () => {
     const binDef = BINS.find((b) => b.key === bin)
@@ -60,7 +69,7 @@ export default function FieldLead({ go }) {
     dispatch({
       type: 'CREATE_BAG',
       bag: {
-        stream, bin, qty, declaredKg: binDef.kg * qty, photo: thumb, gps,
+        stream, bin, qty, declaredKg: binDef.kg * qty, photo: thumb, gps, foods: stream === 'food' ? foods : [],
         ai: ai ? { source: ai.source, confidence: ai.confidence, stream: ai.stream, sealIntact: ai.sealIntact, contamination: ai.contamination } : null,
         safetyCheck: stream === 'food' ? { passed: true, items: SAFETY_EN } : null,
       },
@@ -70,7 +79,7 @@ export default function FieldLead({ go }) {
   }
 
   const step1Done = Boolean(ai) || photo === 'skipped'
-  const step2Done = bin && (stream !== 'food' || safety.every(Boolean))
+  const step2Done = bin && (stream !== 'food' || (safety.every(Boolean) && foods.length > 0 && foods.every((f) => f.type !== 'unknown')))
   const steps = [t('field.s1'), t('field.s2'), t('field.s3')]
 
   return (
@@ -166,6 +175,13 @@ export default function FieldLead({ go }) {
 
             {stream === 'food' && (
               <div>
+                <CardTitle title={t('field.foods')} subtitle={t('field.foodsHint')} className="mb-4" />
+                <FoodEditor foods={foods} onChange={setFoods} />
+              </div>
+            )}
+
+            {stream === 'food' && (
+              <div>
                 <CardTitle title={t('field.safety')} subtitle="All four must be true before food goes to the NGO." className="mb-4" />
                 <div className="space-y-2.5">
                   {SAFETY.map((k, i) => <Toggle key={k} label={t(k)} color="#DC2626" checked={safety[i]} onChange={(v) => setSafety((a) => a.map((x, j) => (j === i ? v : x)))} />)}
@@ -217,5 +233,40 @@ export default function FieldLead({ go }) {
         </Card>
       </div>
     </>
+  )
+}
+
+/** Add / remove the dishes in a food rescue bag (pre-filled from the AI photo check). */
+function FoodEditor({ foods, onChange }) {
+  const [name, setName] = useState('')
+  const [type, setType] = useState('veg')
+  const add = (e) => {
+    e.preventDefault()
+    const n = name.trim()
+    if (!n || foods.some((f) => f.name.toLowerCase() === n.toLowerCase())) return
+    onChange([...foods, { name: n.charAt(0).toUpperCase() + n.slice(1), type }])
+    setName('')
+  }
+  return (
+    <div className="space-y-3">
+      {foods.length ? (
+        <>
+          <FoodList foods={foods} onRemove={(i) => onChange(foods.filter((_, j) => j !== i))} onToggle={(i, type) => onChange(foods.map((f, j) => (j === i ? { ...f, type } : f)))} />
+          {foods.some((f) => f.type === 'unknown') && <Note tone="amber">Tap the <b>?</b> to mark {foods.filter((f) => f.type === 'unknown').map((f) => f.name).join(', ')} as veg or non-veg.</Note>}
+          <p className="text-[15px] text-muted">Check the names and veg / non-veg marks before dispatch. The AI can confuse similar-looking dishes, like paneer and chicken curries. Tap a mark to change it.</p>
+        </>
+      ) : <Note tone="amber">Add at least one dish. The NGO needs to know what food is coming.</Note>}
+      <form onSubmit={add} className="flex flex-wrap gap-2">
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Add a dish, e.g. Dal makhani" aria-label="Dish name"
+          className="flex-1 min-w-48 min-h-12 px-4 rounded-2xl border border-line bg-white text-base focus:outline-2 focus:outline-mint" />
+        <div className="flex rounded-2xl border border-line overflow-hidden" role="group" aria-label="Veg or non-veg">
+          {[['veg', 'Veg'], ['non-veg', 'Non-veg']].map(([k, l]) => (
+            <button key={k} type="button" aria-pressed={type === k} onClick={() => setType(k)}
+              className={`flex items-center gap-2 min-h-12 px-3.5 text-[15px] font-medium ${type === k ? 'bg-sage text-forest' : 'bg-white text-muted'}`}><DietMark type={k} />{l}</button>
+          ))}
+        </div>
+        <Button type="submit" variant="outline" disabled={!name.trim()}>Add</Button>
+      </form>
+    </div>
   )
 }
